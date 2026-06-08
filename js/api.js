@@ -312,6 +312,7 @@ const MindLinkAPI = (() => {
     let currentMessages = [...messages];
     const allAddedMessageIds = [];
     let lastError = null;
+    let webSearchUsed = false; // Web検索（custom_search / googleSearch Grounding）使用フラグ
 
     // ツール呼び出しが発生するたびにループを継続する
     toolLoop: while (true) {
@@ -340,10 +341,20 @@ const MindLinkAPI = (() => {
 
             const isGemini2_5 = actualModel.includes('gemini-2.5');
             const tools = [];
-            if (!isGemini2_5) tools.push({ googleSearch: {} });
-            tools.push({ url_context: {} });
-            if (window.MindLinkGoogleServices) {
-              tools.push({ function_declarations: window.MindLinkGoogleServices.TOOL_DECLARATIONS });
+            // gemini-2.5系はtool context circulation非対応（公式仕様）のためツール一切不使用
+            if (!isGemini2_5) {
+              tools.push({ googleSearch: {} });
+              tools.push({ url_context: {} });
+              if (window.MindLinkGoogleServices) {
+                const cx = settings.searchEngineId;
+                // cx 未設定時は custom_search を除外（モデルが呼ぼうとして失敗するのを防ぐ）
+                const declarations = cx
+                  ? window.MindLinkGoogleServices.TOOL_DECLARATIONS
+                  : window.MindLinkGoogleServices.TOOL_DECLARATIONS.filter(t => t.name !== 'custom_search');
+                if (declarations.length > 0) {
+                  tools.push({ function_declarations: declarations });
+                }
+              }
             }
 
             const nowJST = new Date();
@@ -392,8 +403,7 @@ const MindLinkAPI = (() => {
 
             if (tools.length > 0) {
               body.tools = tools;
-              body.tool_config = { function_calling_config: { mode: "AUTO" } };
-              if (!isGemini2_5) body.tool_config.include_server_side_tool_invocations = true;
+              body.tool_config = { function_calling_config: { mode: "AUTO" }, include_server_side_tool_invocations: true };
             }
 
             let profilePrompt = "";
@@ -447,7 +457,18 @@ const MindLinkAPI = (() => {
    - 【確認】「今何聴いてる？」「今の曲は？」→ \`spotify_get_current_track\` で最新情報を取得して答える。
    - Spotifyが未連携・未ログインの場合は「Spotifyが連携されていないためできません」と伝えてください。`.trim();
 
-            const searchInstruction = "\n\n【優先度1：Google Search / URL読み取りルール】\nユーザーから特定の場所や店舗、周辺情報について尋ねられたら、まず現在地を取得した上で、その座標やキーワードを元に Google Search を実行し、具体的な店舗名、特徴、営業時間などを詳しくリストアップして回答してください。\nまた、ユーザーがURLを共有した場合は url_context ツールによりそのページの内容を自動的に読み取れます。URLの内容を踏まえた上で回答してください（要約・翻訳・質問への回答など）。";
+            const searchInstruction = `\n\n【優先度1：検索機能の使い分けルール】
+■ 通常のウェブ検索（最新情報・ニュース・一般的な調べ物）
+→ googleSearch グラウンディングを使用してください（自動で行われます）。
+
+■ 特定サイト検索（「〇〇サイトで調べて」「公式サイトを検索して」「〇〇のページを探して」など）
+→ custom_search ツールを使用し、site パラメータに対象ドメインを指定してください（cx設定時のみ利用可能）。
+
+■ URL読み取り（ユーザーがURLを共有した場合）
+→ url_context ツールでページ内容を自動読み取りし、要約・翻訳・質問への回答を行ってください。
+
+■ 場所・店舗の周辺検索
+→ まず get_current_location で現在地を取得し、search_nearby_places で検索してください。`;
 
 
             let ragPrompt = "";
@@ -574,6 +595,10 @@ const MindLinkAPI = (() => {
                   for (const candidate of candidates) {
                     // finishReasonを追跡（SAFETY / RECITATION / MAX_TOKENS / STOP）
                     if (candidate.finishReason) finishReason = candidate.finishReason;
+                    // Google Search Grounding 検出
+                    if (candidate.groundingMetadata?.webSearchQueries?.length > 0) {
+                      webSearchUsed = true;
+                    }
                     const chunksParts = candidate.content?.parts || [];
                     allParts = [...allParts, ...chunksParts];
                     for (const p of chunksParts) {
@@ -594,6 +619,10 @@ const MindLinkAPI = (() => {
 
             // ── ツール呼び出し処理（再帰なし・ループで継続） ──
             const pendingCalls = allParts.filter(p => p.functionCall).map(p => p.functionCall);
+            // custom_search が呼ばれた場合は webSearchUsed フラグを立てる
+            if (pendingCalls.some(c => c.name === 'custom_search')) {
+              webSearchUsed = true;
+            }
             if (pendingCalls.length > 0) {
               const functionResponses = [];
               for (const call of pendingCalls) {
@@ -639,7 +668,7 @@ const MindLinkAPI = (() => {
               continue toolLoop;
             }
 
-            return onComplete(fullText, [], actualModel, finishReason);
+            return onComplete(fullText, webSearchUsed ? ['__web_search__'] : [], actualModel, finishReason);
 
           } catch (e) {
             if (e.name === 'AbortError') return;

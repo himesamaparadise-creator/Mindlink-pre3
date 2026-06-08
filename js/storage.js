@@ -215,6 +215,7 @@ const MindLinkStorage = (() => {
     maxTokens: 8192,
     autoLockMinutes: 15,
     theme: 'system',
+    colorTheme: 'default',
     fontSize: 14,
     encryptedApiKey: null,
     encryptedGoogleServicesApiKey: null,

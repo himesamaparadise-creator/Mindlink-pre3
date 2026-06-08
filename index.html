@@ -777,6 +777,27 @@
             </div>
           </div>
           <div class="setting-group">
+            <label class="setting-label">カラーテーマ</label>
+            <div class="color-theme-options">
+              <button class="color-theme-option" data-color-theme-option="default">
+                <span class="color-theme-swatch cto-default"></span>
+                <span>デフォルト</span>
+              </button>
+              <button class="color-theme-option" data-color-theme-option="mauve">
+                <span class="color-theme-swatch cto-mauve"></span>
+                <span>モーブ</span>
+              </button>
+              <button class="color-theme-option" data-color-theme-option="sage">
+                <span class="color-theme-swatch cto-sage"></span>
+                <span>セージ</span>
+              </button>
+              <button class="color-theme-option" data-color-theme-option="amber">
+                <span class="color-theme-swatch cto-amber"></span>
+                <span>アンバー</span>
+              </button>
+            </div>
+          </div>
+          <div class="setting-group">
             <label class="setting-label">フォントサイズ</label>
             <div class="setting-slider-wrapper">
               <input type="range" class="setting-slider" id="setting-font-size" min="12" max="20" step="1" value="14">
@@ -796,6 +817,11 @@
             <label class="setting-label">Google Client Secret</label>
             <input type="password" class="setup-input" id="setting-google-client-secret" placeholder="クライアントシークレットを入力">
             <p class="setting-hint">リフレッシュトークン（永続化）の取得に必要です。</p>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">🔍 Google 検索エンジンID (cx)</label>
+            <input type="text" class="setup-input" id="setting-search-engine-id" placeholder="例: 012345678901234567890:abc">
+            <p class="setting-hint">Custom Search APIで使用するSearch Engine ID。<a href="https://programmablesearchengine.google.com/" target="_blank" rel="noopener">Programmable Search Engine</a>で取得できます。Googleツール用APIキーも必要です。</p>
           </div>
           <div class="setting-group">
             <label class="setting-label">Google 連携ステータス</label>

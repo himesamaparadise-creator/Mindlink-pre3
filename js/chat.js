@@ -221,6 +221,7 @@ const MindLinkChat = (() => {
               ${(!isUser && msg.actualModel && msg.requestedModel && msg.actualModel !== msg.requestedModel) ? `
                 <div class="fallback-badge" title="高速な代替モデル（${msg.actualModel}）で返答しました">⚡ (代打)</div>
               ` : ''}
+              ${(!isUser && msg.webSearchUsed) ? `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:11px;padding:2px 8px;background:rgba(59,130,246,0.12);color:#60a5fa;border-radius:12px;border:1px solid rgba(59,130,246,0.25);" title="Web検索を使って回答しました">🔍 Web検索</div>` : ''}
             </div>
             <div class="message-time">${formatTime(msg.timestamp)}</div>
           </div>
@@ -526,6 +527,7 @@ const MindLinkChat = (() => {
           actualModel: actualModel,
           requestedModel: requestedModel,
           isSafety: isSafety,
+          webSearchUsed: suggestions.includes('__web_search__'),
         };
         MindLinkStorage.addMessage(threadId, aiMsg);
         appendMessage(aiMsg, persona);
@@ -609,9 +611,10 @@ const MindLinkChat = (() => {
         }
         */
 
-        // メモリ提案表示
-        if (suggestions.length > 0) {
-          MindLinkMemory.showMemorySuggestion(suggestions[0]);
+        // メモリ提案表示（内部マーカーを除外してから表示）
+        const memorySuggestions = suggestions.filter(s => s !== '__web_search__');
+        if (memorySuggestions.length > 0) {
+          MindLinkMemory.showMemorySuggestion(memorySuggestions[0]);
         }
       },
       onError: (err) => {
