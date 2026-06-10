@@ -108,7 +108,9 @@ ${context.slice(0, 40000)}
         console.warn('[MindLink] deleteDailySummary after reflection failed:', e)
       );
 
-      // ── 4つ目の省察：いいねスタイル学習 ──
+      // ── いいね学習：関心トピック & 響いた気づき ──
+      // いいねボタンは「文体の好み」ではなく「話題・関心」と「省察の深化材料」を学習する用途に変更。
+      // likedMessages から2種類を抽出し、reflections ストアに sectionType 付きで保存（RAGで参照）。
       try {
         const likedMsgs = await MindLinkStorage.getLikedMessages();
         if (likedMsgs && likedMsgs.length > 0) {
@@ -116,35 +118,54 @@ ${context.slice(0, 40000)}
             .sort((a, b) => b.likeCount - a.likeCount)
             .map(m => `[いいね数: ${m.likeCount}]\n${m.content}`)
             .join('\n\n');
-          const stylePrompt = `以下はユーザーがいいねしたAIの返答です。
-likeCount が多いほど強く好まれています。
-文章をそのまま抽出せず、
-「どんな言い回し・語尾・テンポ・雰囲気が好まれているか」
-を傾向として簡潔に言語化してください。
-定型文にならないよう、スタイルの特徴だけを抽出してください。
-JSONなどの構造化は不要。自然な日本語で200文字以内。
+          const likedPrompt = `以下はユーザーが「いいね」したAIの返答です。likeCount が多いほど強く心に響いています。
+これらを元に、ユーザーの関心を2つの観点で言語化してください。
+返答そのものを抜き出すのではなく、傾向として簡潔にまとめてください。
+
+【関心トピック】
+ユーザーがどんな話題・テーマ・領域に関心や心の動きを示したか。
+
+【響いた気づき】
+今日ユーザーの心に響いたこと、今後の省察を深めるための手がかり。
+
+各セクション150文字以内。自然な日本語で。JSONなどの構造化は不要。
 
 ${likedList.slice(0, 10000)}`;
-          const styleSummary = await window.MindLinkAPI.getSummary(stylePrompt, false);
-          if (styleSummary) {
-            const today = new Date().toISOString().slice(0, 10);
-            await MindLinkStorage.saveLikedStyleSummary({ date: today, summary: styleSummary });
-            await MindLinkStorage.clearLikedMessages();
-            console.log('[MindLink] いいねスタイル学習完了:', styleSummary);
+          const likedSummary = await window.MindLinkAPI.getSummary(likedPrompt, false);
+          if (likedSummary) {
+            const topicMatch   = likedSummary.match(/【関心トピック】([\s\S]*?)(?=【響いた気づき】|$)/);
+            const insightMatch = likedSummary.match(/【響いた気づき】([\s\S]*?)$/);
+            const likedDefs = [
+              { key: 'liked_topic',   content: topicMatch   ? topicMatch[1].trim()   : '', label: '関心トピック' },
+              { key: 'liked_insight', content: insightMatch ? insightMatch[1].trim() : '', label: '響いた気づき' },
+            ];
+            const liked_ts = Date.now();
+            let likedSaved = 0;
+            for (let i = 0; i < likedDefs.length; i++) {
+              const d = likedDefs[i];
+              if (!d.content) continue;
+              const emb = await window.MindLinkAPI.getEmbedding(d.content);
+              await MindLinkStorage.saveReflection({
+                id:           'liked_' + (liked_ts + i),
+                content:      d.content,
+                embedding:    emb,
+                sectionType:  d.key,
+                sectionLabel: d.label,
+                createdAt:    liked_ts + i,
+                date:         dateStr,
+                type:         'liked_learning'
+              });
+              likedSaved++;
+            }
+            // 保存できた場合のみ当日バッファをリセット（失敗時は次回に再試行）
+            if (likedSaved > 0) {
+              await MindLinkStorage.clearLikedMessages();
+              console.log(`[MindLink] いいね学習完了（関心トピック・響いた気づき）: ${likedSaved}件`);
+            }
           }
         }
-      } catch (styleErr) {
-        console.warn('[MindLink] いいねスタイル省察 failed:', styleErr);
-      }
-
-      // ── 古いいいねスタイル要約を自動削除（重み0.09以下 = 約10日以上前） ──
-      try {
-        const pruned = await MindLinkStorage.pruneOldLikedStyleSummaries(0.09);
-        if (pruned > 0) {
-          console.log(`[MindLink] 古いスタイル要約を${pruned}件削除しました`);
-        }
-      } catch (pruneErr) {
-        console.warn('[MindLink] スタイル要約の自動削除に失敗:', pruneErr);
+      } catch (likedErr) {
+        console.warn('[MindLink] いいね学習 failed:', likedErr);
       }
 
       // リストの再描画

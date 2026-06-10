@@ -488,10 +488,10 @@ const MindLinkAPI = (() => {
                       : Promise.resolve([]),
                   ]);
                   if (refs.length > 0 || researchThreads.length > 0) {
-                    const knowledge = refs.filter(r => r.sectionType === 'user_knowledge' || r.sectionType === 'ai_growth').slice(0, 3);
+                    const knowledge = refs.filter(r => ['user_knowledge', 'ai_growth', 'liked_topic', 'liked_insight'].includes(r.sectionType)).slice(0, 4);
                     const episodes  = refs.filter(r => r.sectionType === 'episode' || !r.sectionType).slice(0, 2);
                     const ragParts  = [];
-                    if (knowledge.length > 0) ragParts.push('【最新のユーザー理解・AI成長メモ（新しい情報を優先）】\n' + knowledge.map(r => `* ${r.content}`).join('\n'));
+                    if (knowledge.length > 0) ragParts.push('【最新のユーザー理解・関心・気づき（新しい情報を優先）】\n' + knowledge.map(r => `* ${r.content}`).join('\n'));
                     if (episodes.length  > 0) ragParts.push('【過去の思い出・出来事（参考情報）】\n'     + episodes.map(r => `* ${r.content}`).join('\n'));
                     if (researchThreads.length > 0) ragParts.push('【未解決スレッド・継続的関心（過去に気になっていたこと）】\n' + researchThreads.map(r => `* ${r.content}`).join('\n'));
                     if (ragParts.length  > 0) ragPrompt = '\n\n【優先度3：過去の自己省察（※古い情報の可能性があるため参考程度）】\n' + ragParts.join('\n\n');
@@ -501,26 +501,6 @@ const MindLinkAPI = (() => {
                   console.warn('[MindLink] RAG prompt build failed:', ragErr);
                 }
               }
-            }
-
-            // いいねスタイル傾向プロンプト
-            let likedStylePrompt = "";
-            try {
-              const summaries = await MindLinkStorage.getLikedStyleSummaries();
-              if (summaries && summaries.length > 0) {
-                const now = Date.now();
-                const weighted = summaries
-                  .map(s => ({
-                    ...s,
-                    weight: 1 / ((now - new Date(s.date)) / 86400000 + 1)
-                  }))
-                  .filter(s => s.weight > 0.09)
-                  .sort((a, b) => b.weight - a.weight);
-                const lines = weighted.map(s => `・${s.date}：${s.summary}`).join('\n');
-                likedStylePrompt = `\n\n【優先度4：ユーザーが好むスタイル傾向（新しい順）】\n${lines}\n\n上記の傾向を参考に、自然な形で言い回しや語尾に反映してください。\nただし、傾向に縛られすぎず会話の流れを優先してください。`;
-              }
-            } catch (e) {
-              console.warn('[MindLink] likedStylePrompt error:', e);
             }
 
             const boldInstruction = "\n\n【読みやすさと魅力向上のルール】\nメッセージ全体の2割程度を目安に、以下の内容を **太字** (Markdownの `**`) で装飾してください。";
@@ -535,14 +515,13 @@ const MindLinkAPI = (() => {
             }
 
             const finalPromptText = [
-              "【システム全体ルールの優先順位】\n必ず以下の優先順位に従って矛盾を排除して回答してください：\n1位: カスタム指示＆プロフィール＆役割（絶対的事実）\n2位: 今日の会話の流れ（同日内記憶補完・当日限り）\n3位: 自己省察RAG\n4位: いいねスタイル傾向\n5位: 個別記憶（長期記憶）",
+              "【システム全体ルールの優先順位】\n必ず以下の優先順位に従って矛盾を排除して回答してください：\n1位: カスタム指示＆プロフィール＆役割（絶対的事実）\n2位: 今日の会話の流れ（同日内記憶補完・当日限り）\n3位: 自己省察RAG（ユーザーの関心・気づき含む）\n4位: 個別記憶（長期記憶）",
               profilePrompt,
               basePrompt,
               technicalAutonomyInstruction,
               searchInstruction,
               dailySummaryPrompt,
               ragPrompt,
-              likedStylePrompt,
               memoryPrompt,
               spotifyPrompt,
               boldInstruction,

@@ -18,13 +18,17 @@ const MindLinkRAG = (() => {
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
-  // 時間減衰係数（episode/旧形式は減衰なし、research_threadは緩やか、user_knowledge/ai_growthは標準減衰）
+  // 時間減衰係数
+  // ・episode / 旧形式（sectionTypeなし）: 減衰なし（1.0）
+  // ・research_thread: 緩やかな減衰（半減期 約70日）
+  // ・user_knowledge / ai_growth / liked_topic / liked_insight: 標準減衰（半減期 約35日）
   function temporalDecay(reflection) {
     if (!reflection.sectionType || reflection.sectionType === 'episode') return 1.0;
     const daysPassed = (Date.now() - reflection.createdAt) / (1000 * 60 * 60 * 24);
     if (reflection.sectionType === 'research_thread') {
       return Math.exp(-0.01 * daysPassed); // 半減期 約70日（継続的関心は長く保持）
     }
+    // user_knowledge / ai_growth / liked_topic / liked_insight はすべて標準減衰
     return Math.exp(-0.02 * daysPassed); // 半減期 約35日
   }
 
