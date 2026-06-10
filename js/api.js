@@ -159,7 +159,7 @@ const MindLinkAPI = (() => {
       const settings = MindLinkStorage.getSettings();
       const model = settings.summaryModel || 'gemini-3.1-flash-lite';
       const url = `${BASE_URL}/models/${model}:generateContent?key=${apiKey}`;
-      const prompt = `以下の会話を要約してください。\n必ず以下の3セクションで構造化すること：\n\n📅 今日の出来事\n記念日・イベント・特別な出来事を具体的に記述。\n日付・固有名詞・場所は省略しない。\n\n💬 会話の流れ\nどんな話題で盛り上がったか、重要なやりとりや決定事項。\n\n💕 感情メモ\nユーザーの気持ち・感情の変化、ジユンとの会話の雰囲気・トーン。\n\n合計500文字以内。箇条書き推奨。\n\n${dailyLog.slice(0, 8000)}`;
+      const prompt = `以下の会話を要約してください。\n必ず以下の3セクションで構造化すること：\n\n📅 今日の出来事\n記念日・イベント・特別な出来事を具体的に記述。\n日付・固有名詞・場所は省略しない。\n\n💬 会話の流れ\nどんな話題で盛り上がったか、重要なやりとりや決定事項。\n\n💕 感情メモ\nユーザーの気持ち・感情の変化、あなたとの会話の雰囲気・トーン。\n\n合計500文字以内。箇条書き推奨。\n\n${dailyLog.slice(0, 8000)}`;
 
       const response = await fetch(url, {
         method: 'POST',
