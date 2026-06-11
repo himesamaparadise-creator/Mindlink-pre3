@@ -77,12 +77,25 @@ const MindLinkAPI = (() => {
     });
 
     if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || 'Summary Generation Error');
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `要約生成エラー (HTTP ${response.status})`);
     }
 
     const data = await response.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!text) {
+      // HTTP 200 でも本文が空になるケース（セーフティブロック等）の原因を可視化する。
+      // ・promptFeedback.blockReason : 入力プロンプト自体がブロックされた
+      // ・candidates[0].finishReason : 出力が SAFETY / RECITATION / MAX_TOKENS 等で停止
+      const blockReason  = data?.promptFeedback?.blockReason;
+      const finishReason = data?.candidates?.[0]?.finishReason;
+      let detail;
+      if (blockReason)       detail = `入力がブロックされました (${blockReason})`;
+      else if (finishReason) detail = `応答が生成されませんでした (${finishReason})`;
+      else                   detail = '応答が空でした';
+      throw new Error(`要約生成に失敗: ${detail}`);
+    }
+    return text;
   }
 
   /**
@@ -341,9 +354,13 @@ const MindLinkAPI = (() => {
 
             const isGemini2_5 = actualModel.includes('gemini-2.5');
             const tools = [];
-            // gemini-2.5系はtool context circulation非対応（公式仕様）のためツール一切不使用
+            let hasFunctionDeclarations = false;
+            // グラウンディング（googleSearch）は全モデルで付与（gemini-2.5系も公式にサポート）
+            tools.push({ googleSearch: {} });
+            // url_context は gemini-2.5系では googleSearch と同時付与できない（公式制約）ため除外。
+            // function_declarations（custom_search等の関数ツール）も tool context circulation
+            // 非対応の gemini-2.5系では引き続き除外する。
             if (!isGemini2_5) {
-              tools.push({ googleSearch: {} });
               tools.push({ url_context: {} });
               if (window.MindLinkGoogleServices) {
                 const cx = settings.searchEngineId;
@@ -353,6 +370,7 @@ const MindLinkAPI = (() => {
                   : window.MindLinkGoogleServices.TOOL_DECLARATIONS.filter(t => t.name !== 'custom_search');
                 if (declarations.length > 0) {
                   tools.push({ function_declarations: declarations });
+                  hasFunctionDeclarations = true;
                 }
               }
             }
@@ -403,7 +421,21 @@ const MindLinkAPI = (() => {
 
             if (tools.length > 0) {
               body.tools = tools;
-              body.tool_config = { function_calling_config: { mode: "AUTO" }, include_server_side_tool_invocations: true };
+              const toolConfig = {};
+              // include_server_side_tool_invocations は tool call context circulation を要するが
+              // gemini-2.5系は非対応（"Tool call context circulation is not enabled" エラー）のため
+              // 非2.5系のみ有効化する。2.5系は googleSearch 単独でグラウンディングが動作する。
+              if (!isGemini2_5) {
+                toolConfig.include_server_side_tool_invocations = true;
+              }
+              // function_calling_config は関数ツール（function_declarations）を付与した時のみ設定
+              if (hasFunctionDeclarations) {
+                toolConfig.function_calling_config = { mode: "AUTO" };
+              }
+              // 空でなければ付与（2.5系は googleSearch のみで tool_config 不要）
+              if (Object.keys(toolConfig).length > 0) {
+                body.tool_config = toolConfig;
+              }
             }
 
             let profilePrompt = "";
