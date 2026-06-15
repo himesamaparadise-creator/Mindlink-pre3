@@ -314,11 +314,13 @@ const MindLinkAPI = (() => {
       : '';
 
     // フォールバック用のモデルチェーン
+    // url_context（URL読み取り）を維持するため、対応モデル（3系）のみに限定。
+    // ・2.5系は url_context 非対応のため除外（URLを読めず誤動作する）
+    // ・3.1-pro は高コストのため自動フォールバックには含めない
+    // → 安価で安定した gemini-3.1-flash-lite を唯一の落ち先にする
     const fallbackChain = [
       requestedModel,
-      'gemini-3.1-flash-lite',
-      'gemini-2.5-flash',
-      'gemini-2.5-flash-lite'
+      'gemini-3.1-flash-lite'
     ];
 
     // ツールループ用：現在のメッセージ列・追加済みIDを管理
@@ -340,7 +342,7 @@ const MindLinkAPI = (() => {
           let allParts = [];
           let finishReason = null;
           // ── アイドルタイムアウト（30秒）用 ──
-          const TIMEOUT_MS = 30000;
+          const TIMEOUT_MS = 90000; // url_context（URL読み取り）は初動が遅いため余裕を持たせる
           let timedOut = false;
           let idleTimer = null;
           const timeoutController = new AbortController();
