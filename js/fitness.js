@@ -17,8 +17,8 @@ const MindLinkFitness = (() => {
 
   // ── 状態 ──
   let activeTab    = 'record';   // 'record' | 'chart' | 'history' | 'menu'
-  let weightRange  = '30';       // '30' | '90' | 'all'
-  let fatRange     = '30';
+  let weightMode   = 'recent';   // 'recent' | 'week' | 'month' | 'year'
+  let fatMode      = 'recent';
   let draftWorkouts = [];        // 入力中の筋トレ行
   let draftCardios  = [];        // 入力中の有酸素行
   let editingDate   = null;      // 編集対象の日付（新規はその日の日付）
@@ -586,110 +586,162 @@ ${buildLogText(current)}
 
     el.innerHTML = `
       <div class="fitness-card">
-        <div class="fitness-chart-header">
-          <div class="fitness-section-title">体重 (kg)</div>
-          ${rangeButtons('weight', weightRange)}
-        </div>
-        <div id="fit-chart-weight"></div>
+        <div class="fitness-section-title">体重 (kg)</div>
+        ${modeButtons('weight', weightMode)}
+        <div id="fit-chart-weight" style="margin-top:8px;"></div>
       </div>
       <div class="fitness-card">
-        <div class="fitness-chart-header">
-          <div class="fitness-section-title">体脂肪 (%)</div>
-          ${rangeButtons('bodyFat', fatRange)}
-        </div>
-        <div id="fit-chart-bodyFat"></div>
+        <div class="fitness-section-title">体脂肪 (%)</div>
+        ${modeButtons('bodyFat', fatMode)}
+        <div id="fit-chart-bodyFat" style="margin-top:8px;"></div>
       </div>
     `;
 
-    drawChartInto('fit-chart-weight', logs, 'weight', weightRange, '#6366f1');
-    drawChartInto('fit-chart-bodyFat', logs, 'bodyFat', fatRange, '#10b981');
+    drawChartInto('fit-chart-weight', aggregate(logs, 'weight', weightMode), '#6366f1', 2);
+    drawChartInto('fit-chart-bodyFat', aggregate(logs, 'bodyFat', fatMode), '#10b981', 2);
 
-    el.querySelectorAll('[data-range]').forEach(b => {
+    el.querySelectorAll('[data-mode]').forEach(b => {
       b.addEventListener('click', () => {
         const metric = b.dataset.metric;
-        const range = b.dataset.range;
-        if (metric === 'weight') weightRange = range; else fatRange = range;
+        const mode = b.dataset.mode;
+        if (metric === 'weight') weightMode = mode; else fatMode = mode;
         renderChartTab(el);
       });
     });
   }
 
-  function rangeButtons(metric, current) {
-    const opts = [['30', '30日'], ['90', '90日'], ['all', '全期間']];
+  function modeButtons(metric, current) {
+    const opts = [['recent', '最近'], ['week', '週'], ['month', '月'], ['year', '年']];
     return `<div class="fitness-range-buttons">${opts.map(([k, label]) => `
-      <button data-metric="${metric}" data-range="${k}"
+      <button data-metric="${metric}" data-mode="${k}"
         class="${k === current ? 'active' : ''}">${label}</button>`).join('')}</div>`;
   }
 
-  function filterByRange(logs, metric, range) {
-    let arr = logs.filter(l => typeof l[metric] === 'number' && !isNaN(l[metric]));
-    arr.sort((a, b) => (a.date < b.date ? -1 : 1));
-    if (range === 'all') return arr;
-    const days = range === '30' ? 30 : 90;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    const cf = fmt(cutoff);
-    return arr.filter(l => l.date >= cf);
+  // 期間モードに応じてデータを集計し [{label, value}]（古い順）を返す
+  function aggregate(logs, metric, mode) {
+    const valid = logs
+      .filter(l => typeof l[metric] === 'number' && !isNaN(l[metric]))
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (valid.length === 0) return [];
+
+    // 最近：直近の個別記録（最大10件）／ラベル MM/DD
+    if (mode === 'recent') {
+      return valid.slice(-10).map(l => ({ label: l.date.slice(5).replace('-', '/'), value: l[metric] }));
+    }
+
+    // 週/月/年：期間ごとに平均
+    const groups = new Map();
+    for (const l of valid) {
+      const [yy, mm] = l.date.split('-');
+      let key, label;
+      if (mode === 'week') {
+        const dt = new Date(l.date + 'T00:00:00');
+        const start = new Date(dt); start.setDate(dt.getDate() - dt.getDay()); // 日曜始まり
+        const end = new Date(start); end.setDate(start.getDate() + 6);
+        key = fmt(start);
+        label = `${fmt(start).slice(5).replace('-', '/')}-${fmt(end).slice(5).replace('-', '/')}`;
+      } else if (mode === 'month') {
+        key = `${yy}-${mm}`;
+        label = `${yy}/${mm}`;
+      } else { // year
+        key = yy;
+        label = yy;
+      }
+      const g = groups.get(key) || { sum: 0, count: 0, key, label };
+      g.sum += l[metric]; g.count++;
+      groups.set(key, g);
+    }
+    return [...groups.values()]
+      .sort((a, b) => (a.key < b.key ? -1 : 1))
+      .map(g => ({ label: g.label, value: Math.round((g.sum / g.count) * 10) / 10 }));
   }
 
-  function drawChartInto(containerId, logs, metric, range, color) {
+  function drawChartInto(containerId, series, color, step) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    const data = filterByRange(logs, metric, range);
-    if (data.length === 0) {
+    if (!series || series.length === 0) {
       container.innerHTML = `<div class="fitness-empty">データがありません</div>`;
       return;
     }
-    container.innerHTML = buildSvgLineChart(data.map(d => ({ date: d.date, value: d[metric] })), color);
+    container.innerHTML = buildSvgAreaChart(series, color, step);
   }
 
-  function buildSvgLineChart(points, color) {
-    const W = 320, H = 170;
-    const padL = 38, padR = 12, padT = 14, padB = 26;
-    const innerW = W - padL - padR;
+  // 面塗り＋中空マーカー＋2単位グリッド＋横スクロール（Y軸ラベルは左に固定）
+  function buildSvgAreaChart(series, color, step) {
+    const H = 200;
+    const padT = 14, padB = 30;
     const innerH = H - padT - padB;
+    const Wy = 42; // 固定するY軸ラベル列の幅
 
-    const values = points.map(p => p.value);
-    let min = Math.min(...values);
-    let max = Math.max(...values);
-    if (min === max) { min -= 1; max += 1; }
-    const range = max - min;
+    // 縦メモリを step（2）の倍数に丸める
+    const values = series.map(s => s.value);
+    let niceMin = Math.floor(Math.min(...values) / step) * step;
+    let niceMax = Math.ceil(Math.max(...values) / step) * step;
+    if (niceMin === niceMax) { niceMin -= step; niceMax += step; }
+    const span = niceMax - niceMin;
+    const y = (val) => padT + innerH - ((val - niceMin) / span) * innerH;
 
-    const n = points.length;
+    const ticks = [];
+    for (let v = niceMin; v <= niceMax + 1e-6; v += step) ticks.push(Math.round(v * 10) / 10);
+
+    // 横スクロール用：点数に応じて横幅を確保
+    const n = series.length;
+    const perPoint = 70, padL = 12, padR = 16;
+    const plotW = Math.max(300, padL + padR + (n <= 1 ? 0 : (n - 1) * perPoint));
+    const innerW = plotW - padL - padR;
     const x = (i) => padL + (n === 1 ? innerW / 2 : (innerW * i) / (n - 1));
-    const y = (val) => padT + innerH - ((val - min) / range) * innerH;
+    const baseY = padT + innerH;
 
-    const linePts = points.map((p, i) => `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
-    const dots = points.map((p, i) =>
-      `<circle cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="2.5" fill="${color}"></circle>`
+    const linePts = series.map((s, i) => `${x(i).toFixed(1)},${y(s.value).toFixed(1)}`).join(' ');
+    const gid = 'fitgrad_' + Math.random().toString(36).slice(2, 7);
+
+    // 横グリッド線（2単位）
+    const gridLines = ticks.map(t =>
+      `<line x1="${padL}" y1="${y(t).toFixed(1)}" x2="${(plotW - padR).toFixed(1)}" y2="${y(t).toFixed(1)}" stroke="currentColor" stroke-opacity="0.10"></line>`
     ).join('');
 
-    // Y軸ラベル（min/mid/max）
-    const mid = Math.round(((min + max) / 2) * 10) / 10;
-    const yLabels = [
-      { v: max, yy: y(max) },
-      { v: mid, yy: y(mid) },
-      { v: min, yy: y(min) },
-    ].map(o => `
-      <line x1="${padL}" y1="${o.yy.toFixed(1)}" x2="${W - padR}" y2="${o.yy.toFixed(1)}" stroke="currentColor" stroke-opacity="0.12"></line>
-      <text x="${padL - 5}" y="${(o.yy + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="currentColor" fill-opacity="0.6">${o.v}</text>
-    `).join('');
+    // 各点の小目盛り
+    const xTicks = series.map((s, i) =>
+      `<line x1="${x(i).toFixed(1)}" y1="${baseY.toFixed(1)}" x2="${x(i).toFixed(1)}" y2="${(baseY + 4).toFixed(1)}" stroke="currentColor" stroke-opacity="0.25"></line>`
+    ).join('');
 
-    // X軸ラベル（最初と最後）
-    const md = (ds) => ds.slice(5); // MM-DD
-    const xLabels = `
-      <text x="${x(0).toFixed(1)}" y="${H - 8}" text-anchor="start" font-size="9" fill="currentColor" fill-opacity="0.6">${md(points[0].date)}</text>
-      ${n > 1 ? `<text x="${x(n - 1).toFixed(1)}" y="${H - 8}" text-anchor="end" font-size="9" fill="currentColor" fill-opacity="0.6">${md(points[n - 1].date)}</text>` : ''}
-    `;
+    // X軸ラベル（間引き：最大8個・最初と最後を含む）
+    const maxLabels = 8;
+    const stride = Math.max(1, Math.ceil(n / maxLabels));
+    const xLabels = series.map((s, i) => {
+      if (!(i % stride === 0 || i === n - 1)) return '';
+      const anchor = i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
+      return `<text x="${x(i).toFixed(1)}" y="${(H - 10).toFixed(1)}" text-anchor="${anchor}" font-size="10" fill="currentColor" fill-opacity="0.6">${escapeHtml(s.label)}</text>`;
+    }).join('');
 
-    return `
-      <svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:100%;display:block;">
-        ${yLabels}
-        <polyline points="${linePts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
-        ${dots}
-        ${xLabels}
-      </svg>
-    `;
+    // 中空丸マーカー
+    const dots = series.map((s, i) =>
+      `<circle cx="${x(i).toFixed(1)}" cy="${y(s.value).toFixed(1)}" r="4" fill="#fff" stroke="${color}" stroke-width="2"></circle>`
+    ).join('');
+
+    // 固定Y軸ラベル（プロットと同じスケール）
+    const yAxisSvg = `<svg width="${Wy}" height="${H}" viewBox="0 0 ${Wy} ${H}" style="flex:0 0 ${Wy}px;display:block;">
+      ${ticks.map(t => `<text x="${Wy - 6}" y="${(y(t) + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="currentColor" fill-opacity="0.6">${t}</text>`).join('')}
+    </svg>`;
+
+    // プロット本体（横スクロール）
+    const plotSvg = `<svg width="${plotW}" height="${H}" viewBox="0 0 ${plotW} ${H}" style="display:block;">
+      <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${color}" stop-opacity="0.25"></stop>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0"></stop>
+      </linearGradient></defs>
+      ${gridLines}
+      ${n > 1 ? `<polygon points="${padL.toFixed(1)},${baseY.toFixed(1)} ${linePts} ${x(n - 1).toFixed(1)},${baseY.toFixed(1)}" fill="url(#${gid})"></polygon>` : ''}
+      <polyline points="${linePts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+      ${xTicks}
+      ${dots}
+      ${xLabels}
+    </svg>`;
+
+    return `<div style="display:flex;align-items:flex-start;">
+      ${yAxisSvg}
+      <div style="flex:1;overflow-x:auto;-webkit-overflow-scrolling:touch;">${plotSvg}</div>
+    </div>`;
   }
 
   // ── タブ：履歴（新しい順・タップで詳細展開） ──
