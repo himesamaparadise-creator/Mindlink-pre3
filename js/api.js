@@ -623,14 +623,15 @@ const MindLinkAPI = (() => {
               }
               if (done) {
                 buffer += decoder.decode(); // text flush
-                if (buffer.trim()) buffer += '\n'; // 最後のバッファを強制的に処理させる
+                // 不完全な末尾は強制改行で擬似補完しない（重複パースの原因になるため）
               }
 
-              // SSEのパース： \n\n または \n で区切られた data: 行を探す
-              let lineBreakIdx;
-              while ((lineBreakIdx = buffer.indexOf('\n')) !== -1) {
-                const line = buffer.substring(0, lineBreakIdx).trim();
-                buffer = buffer.substring(lineBreakIdx + 1);
+              // SSEのパース：Gemini APIは `\n` 単独区切りで送ってくるためそれに合わせる
+              // （不完全な末尾は次ループに自然に持ち越される）
+              let sepIdx;
+              while ((sepIdx = buffer.indexOf('\n')) !== -1) {
+                const line = buffer.substring(0, sepIdx).trim();
+                buffer = buffer.substring(sepIdx + 1);
 
                 if (!line.startsWith('data: ')) continue;
 
