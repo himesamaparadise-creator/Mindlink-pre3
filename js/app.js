@@ -410,6 +410,38 @@ const MindLinkApp = (() => {
     _toastTimeout = setTimeout(() => toast.classList.remove('active'), 3000);
   }
 
+  // ── 進捗インジケーター（常駐・完了で消す。省察など時間のかかる処理用） ──
+  // showProgress(text) で表示/更新、hideProgress() で消去。何度呼んでも安全（冪等）。
+  function showProgress(text) {
+    let bar = document.getElementById('app-progress-bar');
+    if (!bar) {
+      // スピナー回転用のキーフレームを一度だけ注入
+      if (!document.getElementById('app-progress-style')) {
+        const style = document.createElement('style');
+        style.id = 'app-progress-style';
+        style.textContent = '@keyframes app-progress-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}';
+        document.head.appendChild(style);
+      }
+      bar = document.createElement('div');
+      bar.id = 'app-progress-bar';
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:100000;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:13px;line-height:1.4;padding:8px 12px;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+      const spinner = document.createElement('span');
+      spinner.textContent = '🌙';
+      spinner.style.cssText = 'display:inline-block;animation:app-progress-spin 1.2s linear infinite;';
+      const label = document.createElement('span');
+      label.id = 'app-progress-text';
+      label.style.flex = '1 1 auto';
+      bar.append(spinner, label);
+      document.body.appendChild(bar);
+    }
+    const label = document.getElementById('app-progress-text');
+    if (label) label.textContent = text;
+  }
+
+  function hideProgress() {
+    document.getElementById('app-progress-bar')?.remove();
+  }
+
   // ── アーカイブ一括エクスポート（JSONファイルとしてダウンロード） ──
   // 読み取りのみ。既存データは一切変更・削除しない。
   async function exportArchive() {
@@ -1641,6 +1673,8 @@ const MindLinkApp = (() => {
     closeAllModals,
     showConfirm,
     showToast,
+    showProgress,
+    hideProgress,
     exportArchive,
     importArchive,
     openSidebar,

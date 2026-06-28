@@ -41,11 +41,12 @@ const MindLinkReflection = (() => {
     }
 
     try {
-      MindLinkApp.showToast('自己省察を行っています... 🌙');
+      MindLinkApp.showProgress('自己省察を始めています… 🌙');
 
       // 【一段階目】チャンクごとに無難な要約を作る（ブロックされたチャンクはスキップ）
       const chunkSummaries = [];
       for (let i = 0; i < chunks.length; i++) {
+        MindLinkApp.showProgress(`今日の会話を整理しています… (${i + 1}/${chunks.length})`);
         const s = await summarizeChunkSafely(chunks[i]);
         if (s) chunkSummaries.push(s);
       }
@@ -93,6 +94,7 @@ ${digest.slice(0, 40000)}
 `;
 
       // 要約の生成 (設定されたモデルを使用)
+      MindLinkApp.showProgress('今日の気づきをまとめています…');
       const summary = await window.MindLinkAPI.getSummary(prompt, false);
       if (!summary) throw new Error('Summary generation failed');
 
@@ -106,6 +108,7 @@ ${digest.slice(0, 40000)}
         { key: 'ai_growth',       content: sections.ai_growth,       label: 'AI成長メモ'   },
         { key: 'research_thread', content: sections.research_thread, label: '未解決スレッド' },
       ];
+      MindLinkApp.showProgress('気づきを記憶に保存しています…');
       let savedCount = 0;
       for (let i = 0; i < sectionDefs.length; i++) {
         const def = sectionDefs[i];
@@ -135,6 +138,7 @@ ${digest.slice(0, 40000)}
           type:      'daily_reflection'
         });
       }
+      MindLinkApp.hideProgress();
       MindLinkApp.showToast('自己省察が完了しました。新しい気づきを記憶しました ✨');
 
       // 今日の会話要約を削除（省察で記憶が引き継がれたため役目終了）
@@ -230,6 +234,7 @@ ${likedList.slice(0, 10000)}`;
 
     } catch (e) {
       console.error('[MindLink Reflection] Reflection failed:', e);
+      MindLinkApp.hideProgress();
       MindLinkApp.showToast('省察に失敗しました: ' + e.message);
     }
   }
