@@ -1008,6 +1008,7 @@ body {
 .cto-mauve   { background: #c09ac3; }
 .cto-sage    { background: #92b89a; }
 .cto-amber   { background: #cc9c78; }
+.cto-yzak    { background: #7db4e4; }
 
 @media (max-width: 700px) {
   .color-theme-options { grid-template-columns: 1fr 1fr; }
@@ -1667,4 +1668,43 @@ body {
   --color-user-bubble: #2a1c0e;
   --color-user-border: #6a4228;
   --color-ai-border:   #4a3020;
+}
+
+/* ── Yzak Theme (アイスブルー × シルバー) ── */
+[data-color-theme="yzak"][data-theme="light"] {
+  --color-accent:      #5a83a3;
+  --color-accent-2:    #86a7c0;
+  --color-accent-glow: rgba(90, 131, 163, 0.15);
+  --color-accent-dark: rgba(90, 131, 163, 0.08);
+  --color-moon:        #9cb6ca;
+  --color-moon-glow:   rgba(156, 182, 202, 0.15);
+  --color-bg:          #e3eaef;
+  --color-bg-2:        #d9e2e9;
+  --color-surface:     #f5f8fa;
+  --color-surface-2:   #ebf1f5;
+  --color-sidebar:     #d9e2e9;
+  --color-border:      #b6c7d3;
+  --color-border-light: #cfdce5;
+  --color-user-bubble: #dce6ed;
+  --color-user-border: #a7bfcf;
+  --color-ai-border:   #b6c7d3;
+  --color-chat-bg:     #e3eaef;
+}
+[data-color-theme="yzak"][data-theme="dark"] {
+  --color-accent:      #7db4e4;
+  --color-accent-2:    #a8cdef;
+  --color-accent-glow: rgba(125, 180, 228, 0.25);
+  --color-accent-dark: rgba(125, 180, 228, 0.1);
+  --color-moon:        #c8dcf0;
+  --color-moon-glow:   rgba(200, 220, 240, 0.2);
+  --color-bg:          #070d17;
+  --color-bg-2:        #0c1422;
+  --color-surface:     #101b2b;
+  --color-surface-2:   #16233a;
+  --color-sidebar:     #091020;
+  --color-border:      #27405e;
+  --color-border-light: #1d3048;
+  --color-user-bubble: #14273e;
+  --color-user-border: #3a6494;
+  --color-ai-border:   #27405e;
 }
