@@ -1861,3 +1861,26 @@ body {
               inset 0 1px 0 rgba(255, 255, 255, 0.5);
   transform: none;
 }
+
+/* ── ハートの鼓動（yzakライトテーマ・送信可能時のみ） ── */
+@keyframes yzakHeartbeat {
+  0%, 100% { transform: scale(1); }
+  10%      { transform: scale(1.08); }
+  20%      { transform: scale(1); }
+  30%      { transform: scale(1.05); }
+  40%      { transform: scale(1); }
+}
+[data-color-theme="yzak"][data-theme="light"] .btn-send:not(:disabled) svg {
+  animation: yzakHeartbeat 2.8s ease-in-out infinite;
+}
+/* 押した瞬間は鼓動を止め、ぷるんと弾む動きを優先 */
+[data-color-theme="yzak"][data-theme="light"] .btn-send:not(:disabled):active svg {
+  animation: none;
+  transform: scale(1.12);
+}
+/* 動きを減らす設定の端末では鼓動を止める */
+@media (prefers-reduced-motion: reduce) {
+  [data-color-theme="yzak"][data-theme="light"] .btn-send svg {
+    animation: none !important;
+  }
+}
