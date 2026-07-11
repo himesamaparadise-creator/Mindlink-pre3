@@ -10,7 +10,7 @@ const MindLinkChat = (() => {
   let _attachedFiles = [];
   let _editingMessageId = null;
 
-  const SEND_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" width="18" height="18"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
+  const SEND_ICON = `<svg viewBox="0 0 24 24" width="18" height="18"><defs><linearGradient id="hbRoseGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2d9d3"/><stop offset="1" stop-color="#d8a8a4"/></linearGradient></defs><path fill="url(#hbRoseGrad)" stroke="rgba(255,255,255,0.85)" stroke-width="0.9" stroke-linejoin="round" d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
   const STOP_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></svg>`;
 
   function setSendButtonState(isStreaming) {
