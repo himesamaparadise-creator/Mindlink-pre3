@@ -1670,25 +1670,29 @@ body {
   --color-ai-border:   #4a3020;
 }
 
-/* ── Yzak Theme (アイスブルー × シルバー) ── */
+/* ── Yzak Theme (Pearl Ice Luxury) ── */
 [data-color-theme="yzak"][data-theme="light"] {
-  --color-accent:      #5a83a3;
-  --color-accent-2:    #86a7c0;
-  --color-accent-glow: rgba(90, 131, 163, 0.15);
-  --color-accent-dark: rgba(90, 131, 163, 0.08);
-  --color-moon:        #9cb6ca;
-  --color-moon-glow:   rgba(156, 182, 202, 0.15);
-  --color-bg:          #e3eaef;
-  --color-bg-2:        #d9e2e9;
-  --color-surface:     #f5f8fa;
-  --color-surface-2:   #ebf1f5;
-  --color-sidebar:     #d9e2e9;
-  --color-border:      #b6c7d3;
-  --color-border-light: #cfdce5;
-  --color-user-bubble: #dce6ed;
-  --color-user-border: #a7bfcf;
-  --color-ai-border:   #b6c7d3;
-  --color-chat-bg:     #e3eaef;
+  --color-accent:      #7fa9b4;
+  --color-accent-2:    #a9cad2;
+  --color-accent-glow: rgba(127, 169, 180, 0.20);
+  --color-accent-dark: rgba(127, 169, 180, 0.09);
+  --color-moon:        #c8b78e;
+  --color-moon-glow:   rgba(200, 183, 142, 0.18);
+  --color-bg:          #ddf2f5;
+  --color-bg-2:        #eff9fa;
+  --color-surface:     #fafdfd;
+  --color-surface-2:   #f0f7f8;
+  --color-sidebar:     #e6f4f6;
+  --color-border:      #b9d2d8;
+  --color-border-light: #cde0e4;
+  --color-text:        #303a43;
+  --color-text-2:      #75858d;
+  --color-text-3:      #9289a0;
+  --color-user-bubble: #def2f5;
+  --color-user-border: rgba(126, 169, 180, 0.48);
+  --color-ai-bubble:   rgba(255, 255, 255, 0.86);
+  --color-ai-border:   rgba(164, 196, 204, 0.55);
+  --color-chat-bg:     #ddf2f5;
 }
 [data-color-theme="yzak"][data-theme="dark"] {
   --color-accent:      #7db4e4;
@@ -1707,4 +1711,153 @@ body {
   --color-user-bubble: #14273e;
   --color-user-border: #3a6494;
   --color-ai-border:   #27405e;
+}
+
+/* ═══════════════════════════════════════════════
+   Pearl Ice Luxury — yzak ライトテーマ専用の上書き
+   （ダークテーマ・他テーマには影響しない）
+   ═══════════════════════════════════════════════ */
+
+/* 全体背景：淡いくすみアクアの縦グラデーション */
+[data-color-theme="yzak"][data-theme="light"] .messages-area {
+  background: linear-gradient(180deg, #eff9fa 0%, #ddf2f5 100%);
+}
+
+/* ヘッダー：パールホワイトのガラス */
+[data-color-theme="yzak"][data-theme="light"] .chat-header {
+  background: rgba(255, 255, 255, 0.76);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(157, 190, 199, 0.38);
+  box-shadow: none;
+}
+[data-color-theme="yzak"][data-theme="light"] .chat-header-sub {
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', Georgia, serif;
+  letter-spacing: 0.05em;
+}
+
+/* AI側カード：透明感のあるパールカード */
+[data-color-theme="yzak"][data-theme="light"] .message-bubble {
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(164, 196, 204, 0.55);
+  border-radius: 22px;
+  padding: 14px 18px;
+  box-shadow: 0 8px 24px rgba(80, 112, 121, 0.08);
+}
+
+/* ユーザー側：淡いアクアの半透明ガラス */
+[data-color-theme="yzak"][data-theme="light"] .message.user .message-bubble {
+  background: rgba(222, 242, 245, 0.72);
+  border: 1px solid rgba(126, 169, 180, 0.48);
+  color: #303a43;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* カード同士の間隔をわずかに広げる */
+[data-color-theme="yzak"][data-theme="light"] .message {
+  margin-bottom: 6px;
+}
+
+/* 名前・時刻：上品なダスティカラー */
+[data-color-theme="yzak"][data-theme="light"] .message-role {
+  color: #788e96;
+}
+[data-color-theme="yzak"][data-theme="light"] .message-time {
+  color: #9289a0;
+}
+[data-color-theme="yzak"][data-theme="light"] .message-input::placeholder {
+  color: #9a8fa5;
+}
+
+/* 入力エリア：背景に溶けるフェード＋ガラスパネル */
+[data-color-theme="yzak"][data-theme="light"] .input-area {
+  background: linear-gradient(180deg, rgba(221, 242, 245, 0.2) 0%, #ddf2f5 45%);
+  border-top: none;
+}
+[data-color-theme="yzak"][data-theme="light"] .input-wrapper {
+  background: rgba(255, 255, 255, 0.80);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(157, 190, 199, 0.55);
+  border-radius: 26px;
+  box-shadow: 0 10px 30px rgba(76, 109, 119, 0.09);
+}
+/* 入力欄フォーカス時：シャンパンゴールドの繊細な合図 */
+[data-color-theme="yzak"][data-theme="light"] .input-wrapper:focus-within {
+  border-color: rgba(200, 183, 142, 0.55);
+  box-shadow: 0 10px 30px rgba(76, 109, 119, 0.09),
+              0 0 0 3px rgba(200, 183, 142, 0.10);
+}
+
+/* 入力まわりのアイコンを統一 */
+[data-color-theme="yzak"][data-theme="light"] .btn-icon {
+  color: #718c94;
+}
+[data-color-theme="yzak"][data-theme="light"] .btn-icon:hover {
+  color: #7fa9b4;
+  background: rgba(127, 169, 180, 0.10);
+}
+[data-color-theme="yzak"][data-theme="light"] .input-action-btn {
+  color: #718c94;
+  border-color: rgba(157, 190, 199, 0.45);
+}
+[data-color-theme="yzak"][data-theme="light"] .input-action-btn:hover {
+  color: #7fa9b4;
+  border-color: #7fa9b4;
+  background: rgba(127, 169, 180, 0.09);
+}
+
+/* ── ハート送信ボタン：磨かれたガラスの小さな宝石 ── */
+[data-color-theme="yzak"][data-theme="light"] .btn-send {
+  width: 42px;
+  height: 42px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #c8e5ea 0%, #a8d0d9 48%, #82adba 100%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 7px 18px rgba(91, 132, 143, 0.24),
+              inset 0 1px 0 rgba(255, 255, 255, 0.72),
+              0 0 0 1px rgba(200, 183, 142, 0.14);
+  transition: transform 0.14s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+/* 上部の薄い光沢 */
+[data-color-theme="yzak"][data-theme="light"] .btn-send::before {
+  content: "";
+  position: absolute;
+  left: 8%; right: 8%; top: 6%;
+  height: 42%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
+  border-radius: 14px;
+  pointer-events: none;
+}
+[data-color-theme="yzak"][data-theme="light"] .btn-send svg {
+  width: 21px;
+  height: 21px;
+  filter: drop-shadow(0 1px 5px rgba(255, 255, 255, 0.45));
+  transition: transform 0.16s ease;
+}
+[data-color-theme="yzak"][data-theme="light"] .btn-send:hover {
+  transform: none;
+  box-shadow: 0 9px 22px rgba(91, 132, 143, 0.28),
+              inset 0 1px 0 rgba(255, 255, 255, 0.72),
+              0 0 0 1px rgba(200, 183, 142, 0.18);
+}
+/* 押下：全体0.96倍・ハートだけ小さく弾む */
+[data-color-theme="yzak"][data-theme="light"] .btn-send:active {
+  transform: scale(0.96);
+}
+[data-color-theme="yzak"][data-theme="light"] .btn-send:active svg {
+  transform: scale(1.12);
+}
+/* 未入力・送信不可 */
+[data-color-theme="yzak"][data-theme="light"] .btn-send:disabled {
+  opacity: 1;
+  background: #d8e5e8;
+  color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 3px 8px rgba(91, 132, 143, 0.12),
+              inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transform: none;
 }
