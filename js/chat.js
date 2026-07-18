@@ -104,26 +104,10 @@ const MindLinkChat = (() => {
     welcome.className = 'welcome-state';
     welcome.innerHTML = `
       <div class="welcome-icon">
-        <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" width="80" height="80">
-          <defs>
-            <radialGradient id="wg2" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#c4b5fd" stop-opacity="0.3"/>
-              <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
-            </radialGradient>
-          </defs>
-          <circle cx="60" cy="60" r="55" fill="url(#wg2)"/>
-          <path d="M70 20 C51 20, 38 34, 38 52 C38 70, 51 84, 70 84 C61 84, 49 76, 47 66 C43 57, 47 43, 56 37 C60 34, 66 23, 70 20Z" fill="#c4b5fd"/>
-          <circle cx="82" cy="32" r="3.5" fill="#fbbf24" opacity="0.8"/>
-          <circle cx="92" cy="50" r="2" fill="#fbbf24" opacity="0.6"/>
-        </svg>
+        <img src="icon-512.png?v=3" alt="" class="welcome-heart-img">
       </div>
-      <h2 class="welcome-title">こんにちは！</h2>
-      <p class="welcome-subtitle">AIとの会話を始めましょう</p>
-      <div class="welcome-suggestions">
-        <button class="suggestion-chip" data-suggestion="今日の気分を聞かせて">💭 今日の気分を聞かせて</button>
-        <button class="suggestion-chip" data-suggestion="何かアイデアを出して">💡 何かアイデアを出して</button>
-        <button class="suggestion-chip" data-suggestion="日本語で雑談しよう">🗣️ 日本語で雑談しよう</button>
-      </div>
+      <h2 class="welcome-title">おかえり、ゆりな</h2>
+      <p class="welcome-subtitle gravity-tagline">Gravity of Us</p>
     `;
     area.appendChild(welcome);
 
