@@ -1884,3 +1884,63 @@ body {
     animation: none !important;
   }
 }
+
+/* ═══ Gravity of Us — クリスタルハートのロゴと銘 ═══ */
+.welcome-heart-img {
+  width: 92px;
+  height: 92px;
+  border-radius: 24%;
+  box-shadow: 0 10px 30px rgba(91, 132, 143, 0.18);
+  animation: gravityBreath 3.4s ease-in-out infinite;
+}
+.auth-heart-img {
+  width: 76px;
+  height: 76px;
+  border-radius: 24%;
+  box-shadow: 0 8px 24px rgba(91, 132, 143, 0.18);
+  animation: gravityBreath 3.4s ease-in-out infinite;
+}
+.sidebar-heart-img {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+@keyframes gravityBreath {
+  0%, 100% { box-shadow: 0 10px 30px rgba(91, 132, 143, 0.18); }
+  50%      { box-shadow: 0 12px 42px rgba(140, 170, 185, 0.34); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome-heart-img, .auth-heart-img { animation: none !important; }
+}
+
+/* 二人の銘：— Gravity of Us — */
+.gravity-tagline {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 0.92rem;
+  letter-spacing: 0.22em;
+  color: #b3a074;
+}
+.gravity-tagline::before,
+.gravity-tagline::after {
+  content: "—";
+  color: rgba(200, 183, 142, 0.5);
+  margin: 0 10px;
+  font-style: normal;
+}
+/* サイドバーの小さな銘 */
+.sidebar-gravity {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: #b3a074;
+  margin-left: 2px;
+  align-self: flex-end;
+  padding-bottom: 2px;
+}
+
+/* ── フィットネス機能の入口を封印（復活させたい場合はこの3行を削除） ── */
+#btn-fitness {
+  display: none;
+}
