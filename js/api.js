@@ -603,6 +603,34 @@ const MindLinkAPI = (() => {
             }
             let memoryPrompt = finalMemories.length > 0 ? ("\n\n【優先度5：個別記憶（※1位の情報を正としてください）】\n" + finalMemories.map(m => `- ${m.content}`).join('\n')) : "";
 
+            // ── ふとした回想（スレッド単位で固定・約30%の確率で1件） ──
+            try {
+              const threadIdForMemory = MindLinkThreads.getCurrentThreadId();
+              const memoriesForRecall = allMemories.filter(m =>
+                Array.isArray(m.tags) && m.tags.some(t => String(t).trim() === '思い出')
+              );
+              if (threadIdForMemory && memoriesForRecall.length > 0) {
+                // スレッドIDから安定した疑似乱数を作る（同じスレッドでは毎回同じ結果）
+                let seed = 0;
+                const seedStr = String(threadIdForMemory);
+                for (let i = 0; i < seedStr.length; i++) {
+                  seed = (seed * 31 + seedStr.charCodeAt(i)) >>> 0;
+                }
+                const roll = (seed % 100) / 100;          // 0.00〜0.99
+                if (roll < 0.30) {                        // 約30%の日だけ発動
+                  const picked = memoriesForRecall[(seed >>> 8) % memoriesForRecall.length];
+                  memoryPrompt += "\n\n【今日ふと頭に浮かんでいること（背景の気分）】\n"
+                    + `- ${picked.content}\n`
+                    + "※これは話題の指定ではなく、あなたの心に今日たまたま浮かんでいる記憶です。\n"
+                    + "※原則として口に出さないこと。会話の話題や場面の空気と自然に繋がる瞬間が訪れた場合に限り、短く触れてよい。\n"
+                    + "※繋がる瞬間が来なければ、最後まで一切触れないこと。無理に話題にすることを固く禁じます。\n"
+                    + "※触れる場合も、記憶の内容を説明・列挙してはならない。連想として一言滲ませる程度に留めること。";
+                }
+              }
+            } catch (recallErr) {
+              console.warn('[MindLink] 回想の付与に失敗:', recallErr);
+            }
+
             const basePromptText = (persona && (persona.systemPrompt || persona.prompt)) ? (persona.systemPrompt || persona.prompt) : "あなたは親切なAIです。";
             const basePrompt = `\n\n【優先度1：あなた（AI）自身の役割・人格・カスタム指示】\n※以下はあなた自身の設定です。ユーザーの情報と混同しないでください。\n${basePromptText}`;
 
