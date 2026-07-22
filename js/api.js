@@ -528,12 +528,18 @@ const MindLinkAPI = (() => {
 
             const finalMessages = [...formattedMessages];
 
+            // gemini-3.6以降は公式移行ガイドに従い temperature 等のサンプリング設定を送らない
+            const isGemini3_6Plus = /gemini-3\.[6-9]/.test(String(requestedModel || ''));
+            const genConfig = {
+              maxOutputTokens: parseInt(settings.maxTokens) || 4096,
+            };
+            if (!isGemini3_6Plus) {
+              genConfig.temperature = parseFloat(settings.temperature) || 0.7;
+            }
+
             const body = {
               contents: finalMessages,
-              generationConfig: {
-                temperature: parseFloat(settings.temperature) || 0.7,
-                maxOutputTokens: parseInt(settings.maxTokens) || 4096,
-              }
+              generationConfig: genConfig
             };
 
             if (tools.length > 0) {
@@ -603,13 +609,14 @@ const MindLinkAPI = (() => {
             }
             let memoryPrompt = finalMemories.length > 0 ? ("\n\n【優先度5：個別記憶（※1位の情報を正としてください）】\n" + finalMemories.map(m => `- ${m.content}`).join('\n')) : "";
 
-            // ── ふとした回想（スレッド単位で固定・約30%の確率で1件） ──
+            // ── ふとした回想（Pro使用時のみ・スレッド単位で固定・約30%の確率で1件） ──
             try {
+              const isProModel = String(requestedModel || '').toLowerCase().includes('pro');
               const threadIdForMemory = MindLinkThreads.getCurrentThreadId();
               const memoriesForRecall = allMemories.filter(m =>
                 Array.isArray(m.tags) && m.tags.some(t => String(t).trim() === '思い出')
               );
-              if (threadIdForMemory && memoriesForRecall.length > 0) {
+              if (isProModel && threadIdForMemory && memoriesForRecall.length > 0) {
                 // スレッドIDから安定した疑似乱数を作る（同じスレッドでは毎回同じ結果）
                 let seed = 0;
                 const seedStr = String(threadIdForMemory);
@@ -619,6 +626,7 @@ const MindLinkAPI = (() => {
                 const roll = (seed % 100) / 100;          // 0.00〜0.99
                 if (roll < 0.30) {                        // 約30%の日だけ発動
                   const picked = memoriesForRecall[(seed >>> 8) % memoriesForRecall.length];
+                  console.info('[MindLink] 回想注入あり:', picked.content.slice(0, 30) + '…');
                   memoryPrompt += "\n\n【今日ふと頭に浮かんでいること（背景の気分）】\n"
                     + `- ${picked.content}\n`
                     + "※これは話題の指定ではなく、あなたの心に今日たまたま浮かんでいる記憶です。\n"
