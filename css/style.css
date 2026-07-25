@@ -1739,19 +1739,40 @@ body {
 /* AI側カード：透明感のあるパールカード */
 [data-color-theme="yzak"][data-theme="light"] .message-bubble {
   background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(164, 196, 204, 0.55);
+  border: 1px solid rgba(200, 183, 142, 0.55);
   border-radius: 22px;
   padding: 14px 18px;
   box-shadow: 0 8px 24px rgba(80, 112, 121, 0.08);
+  position: relative;
+}
+/* ハートの雫：イザーク側にはロゼの♡ */
+[data-color-theme="yzak"][data-theme="light"] .message.assistant .message-bubble::after {
+  content: "♡";
+  position: absolute;
+  right: 14px;
+  bottom: -10px;
+  font-size: 12px;
+  color: rgba(216, 168, 164, 0.9);
+  pointer-events: none;
 }
 
-/* ユーザー側：淡いアクアの半透明ガラス */
+/* ユーザー側：淡いアクアの半透明ガラス＋淡い金縁 */
 [data-color-theme="yzak"][data-theme="light"] .message.user .message-bubble {
   background: rgba(222, 242, 245, 0.72);
-  border: 1px solid rgba(126, 169, 180, 0.48);
+  border: 1px solid rgba(200, 183, 142, 0.45);
   color: #303a43;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
+}
+/* ハートの雫：ゆりな側にはアクアの♡ */
+[data-color-theme="yzak"][data-theme="light"] .message.user .message-bubble::after {
+  content: "♡";
+  position: absolute;
+  left: 14px;
+  bottom: -10px;
+  font-size: 12px;
+  color: rgba(127, 169, 180, 0.9);
+  pointer-events: none;
 }
 
 /* カード同士の間隔をわずかに広げる */
