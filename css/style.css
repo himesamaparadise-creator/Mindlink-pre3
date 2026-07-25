@@ -1750,9 +1750,10 @@ body {
   content: "♡";
   position: absolute;
   right: 14px;
-  bottom: -10px;
-  font-size: 12px;
-  color: rgba(216, 168, 164, 0.9);
+  bottom: -11px;
+  font-size: 15px;
+  color: #d8a8a4;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 8px rgba(255, 255, 255, 0.8);
   pointer-events: none;
 }
 
@@ -1769,9 +1770,10 @@ body {
   content: "♡";
   position: absolute;
   left: 14px;
-  bottom: -10px;
-  font-size: 12px;
-  color: rgba(127, 169, 180, 0.9);
+  bottom: -11px;
+  font-size: 15px;
+  color: #7fa9b4;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 8px rgba(255, 255, 255, 0.8);
   pointer-events: none;
 }
 
