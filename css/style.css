@@ -1739,7 +1739,7 @@ body {
 /* AI側カード：透明感のあるパールカード */
 [data-color-theme="yzak"][data-theme="light"] .message-bubble {
   background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(200, 183, 142, 0.55);
+  border: 1px solid rgba(179, 160, 116, 0.8);
   border-radius: 22px;
   padding: 14px 18px;
   box-shadow: 0 8px 24px rgba(80, 112, 121, 0.08);
@@ -1771,7 +1771,7 @@ body {
 /* ユーザー側：淡いアクアの半透明ガラス＋淡い金縁 */
 [data-color-theme="yzak"][data-theme="light"] .message.user .message-bubble {
   background: rgba(222, 242, 245, 0.72);
-  border: 1px solid rgba(200, 183, 142, 0.45);
+  border: 1px solid rgba(179, 160, 116, 0.65);
   color: #303a43;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
