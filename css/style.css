@@ -1749,11 +1749,22 @@ body {
 [data-color-theme="yzak"][data-theme="light"] .message.assistant .message-bubble::after {
   content: "♡";
   position: absolute;
-  right: 14px;
-  bottom: -11px;
+  right: -6px;
+  bottom: -9px;
   font-size: 15px;
   color: #d8a8a4;
   text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 8px rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+}
+/* 零れ落ちる2粒目・3粒目（3粒目はtext-shadowによる淡い写し） */
+[data-color-theme="yzak"][data-theme="light"] .message.assistant .message-bubble::before {
+  content: "♡";
+  position: absolute;
+  right: 8px;
+  bottom: -17px;
+  font-size: 11px;
+  color: rgba(216, 168, 164, 0.75);
+  text-shadow: -12px 5px 0 rgba(216, 168, 164, 0.45), 0 0 4px rgba(255, 255, 255, 0.9);
   pointer-events: none;
 }
 
@@ -1769,17 +1780,27 @@ body {
 [data-color-theme="yzak"][data-theme="light"] .message.user .message-bubble::after {
   content: "♡";
   position: absolute;
-  left: 14px;
-  bottom: -11px;
+  left: -6px;
+  bottom: -9px;
   font-size: 15px;
   color: #7fa9b4;
   text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 8px rgba(255, 255, 255, 0.8);
   pointer-events: none;
 }
+[data-color-theme="yzak"][data-theme="light"] .message.user .message-bubble::before {
+  content: "♡";
+  position: absolute;
+  left: 8px;
+  bottom: -17px;
+  font-size: 11px;
+  color: rgba(127, 169, 180, 0.75);
+  text-shadow: 12px 5px 0 rgba(127, 169, 180, 0.45), 0 0 4px rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
 
-/* カード同士の間隔をわずかに広げる */
+/* カード同士の間隔（零れ落ちる♡のぶん広めに確保） */
 [data-color-theme="yzak"][data-theme="light"] .message {
-  margin-bottom: 6px;
+  margin-bottom: 18px;
 }
 
 /* 名前・時刻：上品なダスティカラー */
