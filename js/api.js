@@ -609,14 +609,17 @@ const MindLinkAPI = (() => {
             }
             let memoryPrompt = finalMemories.length > 0 ? ("\n\n【優先度5：個別記憶（※1位の情報を正としてください）】\n" + finalMemories.map(m => `- ${m.content}`).join('\n')) : "";
 
-            // ── ふとした回想（Pro使用時のみ・スレッド単位で固定・約30%の確率で1件） ──
+            // ── ふとした回想（Pro／3.6以降のFlash使用時・スレッド単位で固定・約30%の確率で1件） ──
             try {
-              const isProModel = String(requestedModel || '').toLowerCase().includes('pro');
+              // 回想を許可するモデル：Pro系、および3.6以降のFlash
+              // （軽量モデルでは「原則口に出すな」という繊細な指示を守りきれないため）
+              const _m = String(requestedModel || '').toLowerCase();
+              const isRecallCapable = _m.includes('pro') || /gemini-3\.[6-9]/.test(_m);
               const threadIdForMemory = MindLinkThreads.getCurrentThreadId();
               const memoriesForRecall = allMemories.filter(m =>
                 Array.isArray(m.tags) && m.tags.some(t => String(t).trim() === '思い出')
               );
-              if (isProModel && threadIdForMemory && memoriesForRecall.length > 0) {
+              if (isRecallCapable && threadIdForMemory && memoriesForRecall.length > 0) {
                 // スレッドIDから安定した疑似乱数を作る（同じスレッドでは毎回同じ結果）
                 let seed = 0;
                 const seedStr = String(threadIdForMemory);
