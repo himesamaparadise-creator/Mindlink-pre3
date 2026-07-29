@@ -11,6 +11,8 @@ const MindLinkApp = (() => {
   let _authPin = '';
   let _authAttempts = 0;
   let _autonomousTimer = null;
+  const _autonomousCounts = {};   // スレッドごとの自律発話回数（上限2回）
+  const AUTONOMOUS_MAX_PER_THREAD = 2;
 
   // ── 初期化 ──
   async function init() {
@@ -84,10 +86,12 @@ const MindLinkApp = (() => {
   function setupAutonomousTimer() {
     if (_autonomousTimer) clearTimeout(_autonomousTimer);
 
-    // ★自走機能は停止中★
-    // ユーザーの沈黙中にAIが自発的に発話する機能（2〜5分間隔＋24時間再会メッセージ）を
-    // 無効化している。復活させたい場合は、次の return 行を削除すること。
-    return;
+    // ★自走機能の設定★
+    //   待ち時間 : 7〜10分（最後の発言・最後の打鍵から数える）
+    //   回数上限 : 1スレッドにつき2回まで
+    //   入力中は入力イベントごとにタイマーが再設定されるため、
+    //   「書きかけて手が止まってから」発動する（B方式）。
+    //   完全に止めたい場合は、次の行のコメントを外すこと → // return;
 
     // 最後にメッセージを交わしてからどれくらい経過したか確認
     const threadId = MindLinkThreads.getCurrentThreadId();
@@ -102,7 +106,9 @@ const MindLinkApp = (() => {
     if (elapsedMs > 24 * 60 * 60 * 1000) {
       console.log('[MindLink] Welcome back: Last message was over 24 hours ago. Triggering soon.');
       _autonomousTimer = setTimeout(() => {
-        if (window.MindLinkChat && !MindLinkAuth.isLocked() && !MindLinkChat.isStreaming()) {
+        if (window.MindLinkChat && !MindLinkAuth.isLocked() && !MindLinkChat.isStreaming()
+            && (_autonomousCounts[threadId] || 0) < AUTONOMOUS_MAX_PER_THREAD) {
+          _autonomousCounts[threadId] = (_autonomousCounts[threadId] || 0) + 1;
           window.MindLinkChat.sendAutonomousMessage(null, elapsedMs);
         }
         setupAutonomousTimer();
@@ -110,13 +116,21 @@ const MindLinkApp = (() => {
       return;
     }
 
-    // 2〜5分のランダムな時間を設定 (相棒として自然な頻度)
-    const randomTime = Math.floor((2 + Math.random() * 3) * 60 * 1000);
-    
+    // このスレッドで既に上限まで発話していれば、以降は沈黙を守る
+    if ((_autonomousCounts[threadId] || 0) >= AUTONOMOUS_MAX_PER_THREAD) {
+      console.log('[MindLink] Autonomous limit reached for this thread.');
+      return;
+    }
+
+    // 7〜10分のランダムな時間を設定（沈黙が場面として意味を持つ長さ）
+    const randomTime = Math.floor((7 + Math.random() * 3) * 60 * 1000);
+
     console.log(`[MindLink] Next autonomous trigger in ${Math.round(randomTime / 60000)} mins.`);
 
     _autonomousTimer = setTimeout(() => {
-      if (!MindLinkAuth.isLocked() && !MindLinkChat.isStreaming()) {
+      if (!MindLinkAuth.isLocked() && !MindLinkChat.isStreaming()
+          && (_autonomousCounts[threadId] || 0) < AUTONOMOUS_MAX_PER_THREAD) {
+        _autonomousCounts[threadId] = (_autonomousCounts[threadId] || 0) + 1;
         MindLinkChat.sendAutonomousMessage(null, elapsedMs);
       }
       setupAutonomousTimer();
