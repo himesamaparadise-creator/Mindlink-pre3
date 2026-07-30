@@ -1738,7 +1738,7 @@ body {
 
 /* AI側カード：透明感のあるパールカード */
 [data-color-theme="yzak"][data-theme="light"] .message-bubble {
-  background: linear-gradient(180deg, rgba(249, 254, 255, 0.95) 0%, rgba(232, 247, 249, 0.85) 50%, rgba(214, 238, 242, 0.85) 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0px, rgba(255, 255, 255, 0) 36px), rgba(228, 245, 248, 0.88);
   border: 1px solid rgba(179, 160, 116, 0.8);
   border-radius: 22px;
   padding: 14px 18px;
@@ -1771,7 +1771,7 @@ body {
 
 /* ユーザー側：淡いアクアの半透明ガラス＋淡い金縁 */
 [data-color-theme="yzak"][data-theme="light"] .message.user .message-bubble {
-  background: linear-gradient(180deg, rgba(252, 254, 255, 0.95) 0%, rgba(242, 250, 251, 0.85) 50%, rgba(230, 244, 247, 0.85) 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.50) 0px, rgba(255, 255, 255, 0) 30px), rgba(240, 249, 251, 0.88);
   border: 1px solid rgba(179, 160, 116, 0.7);
   color: #303a43;
   -webkit-backdrop-filter: blur(8px);
