@@ -290,10 +290,18 @@ const MindLinkThreads = (() => {
         if (ok && window.MindLinkApp) window.MindLinkApp.showToast('チャットを復元しました');
       });
       div.querySelector('.memory-delete-btn').addEventListener('click', (e) => {
+        e.preventDefault();
         e.stopPropagation();
-        deleteThread(t.id);
-        renderArchiveList();
-        if (window.MindLinkApp) window.MindLinkApp.showToast('削除しました');
+        // アーカイブは過去の会話そのもの。確認なしの削除は事故のもとなので必ず確認する
+        MindLinkApp.showConfirm(
+          'チャットを完全に削除',
+          `「${t.title || '無題のチャット'}」を完全に削除しますか？\nこの会話は元に戻せません。`,
+          () => {
+            deleteThread(t.id);
+            renderArchiveList();
+            if (window.MindLinkApp) window.MindLinkApp.showToast('削除しました');
+          }
+        );
       });
       listEl.appendChild(div);
     });
