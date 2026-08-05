@@ -609,6 +609,14 @@ const MindLinkAPI = (() => {
             }
             let memoryPrompt = finalMemories.length > 0 ? ("\n\n【優先度5：個別記憶（※1位の情報を正としてください）】\n" + finalMemories.map(m => `- ${m.content}`).join('\n')) : "";
 
+            // ── 近づいている記念日（7日前から。遠い時は何も足さない） ──
+            try {
+              const annNote = window.MindLinkAnniversary?.getPromptNote();
+              if (annNote) memoryPrompt += annNote;
+            } catch (annErr) {
+              console.warn('[MindLink] 記念日の付与に失敗:', annErr);
+            }
+
             // ── ふとした回想（Pro／3.6以降のFlash使用時・スレッド単位で固定・約30%の確率で1件） ──
             try {
               // 回想を許可するモデル：Pro系、および3.6以降のFlash
