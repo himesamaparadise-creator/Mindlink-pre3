@@ -1990,3 +1990,19 @@ body {
 #btn-fitness {
   display: none;
 }
+
+
+/* ── 記念日カウンター ── */
+.anniversary-counter {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: var(--color-text-2);
+  margin-top: 10px;
+  text-align: center;
+}
+.anniversary-counter:empty { display: none; }
+[data-color-theme="yzak"][data-theme="light"] .anniversary-counter {
+  color: #b3a074;
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.1em;
+}
