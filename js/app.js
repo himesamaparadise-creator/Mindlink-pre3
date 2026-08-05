@@ -11,8 +11,35 @@ const MindLinkApp = (() => {
   let _authPin = '';
   let _authAttempts = 0;
   let _autonomousTimer = null;
-  const _autonomousCounts = {};   // スレッドごとの自律発話回数（上限2回）
   const AUTONOMOUS_MAX_PER_THREAD = 2;
+  let _autonomousDueAt = 0;   // 発動予定の時刻（アプリ凍結からの復帰を見破るために使う）
+  // スレッドごとの自律発話回数。アプリが再読み込みされても保持されるよう保存する
+  // （PWAは裏に回ると読み込み直されるため、メモリ上だけだと上限が毎回リセットされる）
+  const _AUTONOMOUS_COUNT_KEY = 'mindlink_autonomous_counts';
+  function _getAutonomousCount(threadId) {
+    if (!threadId) return 0;
+    try {
+      const raw = localStorage.getItem(_AUTONOMOUS_COUNT_KEY);
+      const map = raw ? JSON.parse(raw) : {};
+      return map[threadId] || 0;
+    } catch (e) { return 0; }
+  }
+  function _incAutonomousCount(threadId) {
+    if (!threadId) return;
+    try {
+      const raw = localStorage.getItem(_AUTONOMOUS_COUNT_KEY);
+      let map = raw ? JSON.parse(raw) : {};
+      map[threadId] = (map[threadId] || 0) + 1;
+      // 古い記録が溜まらないよう、直近30スレッド分だけ残す
+      const keys = Object.keys(map);
+      if (keys.length > 30) {
+        const trimmed = {};
+        keys.slice(-30).forEach(k => { trimmed[k] = map[k]; });
+        map = trimmed;
+      }
+      localStorage.setItem(_AUTONOMOUS_COUNT_KEY, JSON.stringify(map));
+    } catch (e) { /* 保存できなくても会話は続行する */ }
+  }
 
   // ── 初期化 ──
   async function init() {
@@ -67,6 +94,7 @@ const MindLinkApp = (() => {
     } else {
       showAuthScreen();
     }
+    window.MindLinkAnniversary?.render();
     setupAutonomousTimer();
     setupVisibilityHandler();
 
@@ -106,9 +134,9 @@ const MindLinkApp = (() => {
     if (elapsedMs > 24 * 60 * 60 * 1000) {
       console.log('[MindLink] Welcome back: Last message was over 24 hours ago. Triggering soon.');
       _autonomousTimer = setTimeout(() => {
-        if (window.MindLinkChat && !MindLinkAuth.isLocked() && !MindLinkChat.isStreaming()
-            && (_autonomousCounts[threadId] || 0) < AUTONOMOUS_MAX_PER_THREAD) {
-          _autonomousCounts[threadId] = (_autonomousCounts[threadId] || 0) + 1;
+        if (!document.hidden && window.MindLinkChat && !MindLinkAuth.isLocked() && !MindLinkChat.isStreaming()
+            && _getAutonomousCount(threadId) < AUTONOMOUS_MAX_PER_THREAD) {
+          _incAutonomousCount(threadId);
           window.MindLinkChat.sendAutonomousMessage(null, elapsedMs);
         }
         setupAutonomousTimer();
@@ -117,7 +145,7 @@ const MindLinkApp = (() => {
     }
 
     // このスレッドで既に上限まで発話していれば、以降は沈黙を守る
-    if ((_autonomousCounts[threadId] || 0) >= AUTONOMOUS_MAX_PER_THREAD) {
+    if (_getAutonomousCount(threadId) >= AUTONOMOUS_MAX_PER_THREAD) {
       console.log('[MindLink] Autonomous limit reached for this thread.');
       return;
     }
@@ -127,10 +155,22 @@ const MindLinkApp = (() => {
 
     console.log(`[MindLink] Next autonomous trigger in ${Math.round(randomTime / 60000)} mins.`);
 
+    _autonomousDueAt = Date.now() + randomTime;
+
     _autonomousTimer = setTimeout(() => {
+      // ── 凍結からの復帰チェック ──
+      // アプリを閉じている間タイマーは凍結され、再表示された瞬間にまとめて発火する。
+      // 予定時刻を大きく過ぎている場合や画面が見えていない場合は発動させず、
+      // 改めて時間を計り直す（「開いた瞬間に話しかけられる」現象の防止）。
+      const overdueMs = Date.now() - _autonomousDueAt;
+      if (document.hidden || overdueMs > 90 * 1000) {
+        console.log('[MindLink] Skipped autonomous trigger (app was suspended).');
+        setupAutonomousTimer();
+        return;
+      }
       if (!MindLinkAuth.isLocked() && !MindLinkChat.isStreaming()
-          && (_autonomousCounts[threadId] || 0) < AUTONOMOUS_MAX_PER_THREAD) {
-        _autonomousCounts[threadId] = (_autonomousCounts[threadId] || 0) + 1;
+          && _getAutonomousCount(threadId) < AUTONOMOUS_MAX_PER_THREAD) {
+        _incAutonomousCount(threadId);
         MindLinkChat.sendAutonomousMessage(null, elapsedMs);
       }
       setupAutonomousTimer();
@@ -146,6 +186,7 @@ const MindLinkApp = (() => {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         console.log('[MindLink] App became visible. Re-evaluating autonomous timer.');
+        window.MindLinkAnniversary?.render();
         // タイマーをリセットし、経過時間を再評価させる
         setupAutonomousTimer();
       }
