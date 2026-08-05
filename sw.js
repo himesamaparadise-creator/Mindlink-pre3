@@ -3,7 +3,7 @@
  * PWAのオフラインキャッシュ（Vercel最適化版）
  */
 
-const CACHE_NAME = 'mindlink-v76';
+const CACHE_NAME = 'mindlink-v79';
 const ASSETS = [
   '/',
   '/index.html',
@@ -17,6 +17,7 @@ const ASSETS = [
   '/js/memory.js',
   '/js/personas.js',
   '/js/chat.js',
+  '/js/anniversary.js',
   '/js/app.js',
   '/js/google-auth.js',
   '/js/google-services.js',
