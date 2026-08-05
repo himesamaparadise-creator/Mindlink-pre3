@@ -1,82 +1,1426 @@
-/**
- * MindLink - Service Worker v31
- * PWAのオフラインキャッシュ（Vercel最適化版）
- */
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="MindLink - 個人専用AIチャットアプリ">
+  <meta name="theme-color" content="#0a0f1e" id="theme-color-meta">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MindLink">
+  <script>const CACHE_NAME = 'mindlink-v42';</script>
+  <title>MindLink</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png?v=3">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" id="hljs-theme">
+  <script>
+    // 初回描画前に保存済みテーマを適用（ダーク→ライトのちらつき/FOUC防止）
+    // localStorageの読み取りは同期のため、最初の描画前にテーマが確定する。
+    // 後続の app.js の applyTheme() は同じ値を再設定するだけなので二重適用の害はない。
+    (function() {
+      try {
+        var s = JSON.parse(localStorage.getItem('mindlink_settings') || '{}');
+        var t = s.theme || 'system';
+        if (t === 'system') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', t);
+        if (s.colorTheme) document.documentElement.setAttribute('data-color-theme', s.colorTheme);
+      } catch (e) { /* 読み取り失敗時はHTML既定のダークのまま */ }
+    })();
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Reflection Accordion Styles - Theme Integrated */
+    .reflection-accordion-item {
+      margin-bottom: 12px;
+      border-radius: 12px;
+      background: var(--color-surface-2);
+      border: 1px solid var(--color-border);
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      flex-shrink: 0;
+    }
+    .reflection-accordion-item:hover {
+      border-color: var(--color-accent);
+      background: var(--color-sidebar-hover);
+    }
+    .reflection-header {
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .reflection-header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+    .reflection-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .reflection-action-btn-small {
+      background: none;
+      border: none;
+      color: var(--color-text-3);
+      padding: 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .reflection-action-btn-small:hover {
+      background: var(--color-accent-dark);
+      color: var(--color-accent);
+    }
+    .reflection-action-btn-small.delete-btn:hover {
+      background: rgba(248, 113, 113, 0.1);
+      color: var(--color-danger);
+    }
+    .reflection-chevron-wrapper {
+      padding: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-text-3);
+    }
+    .reflection-date {
+      font-weight: 600;
+      color: var(--color-text);
+      font-size: 0.95rem;
+    }
+    .reflection-title-pill {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      background: var(--color-accent-dark);
+      color: var(--color-accent);
+      border-radius: 20px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .reflection-chevron {
+      transition: transform 0.3s ease;
+      color: var(--color-text-3);
+    }
+    .reflection-accordion-item.active .reflection-chevron {
+      transform: rotate(180deg);
+      color: var(--color-accent);
+    }
+    .reflection-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      background: rgba(0, 0, 0, 0.03);
+    }
+    [data-theme="dark"] .reflection-body {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .reflection-accordion-item.active .reflection-body {
+      max-height: 2000px;
+    }
+    .reflection-inner-content {
+      padding: 24px 20px;
+      font-size: 0.95rem;
+      line-height: 1.8;
+      white-space: pre-wrap;
+      color: var(--color-text);
+      border-top: 1px solid var(--color-border-light);
+    }
+    .reflection-footer {
+      padding: 12px 18px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      border-top: 1px solid var(--color-border);
+    }
+    .reflection-accordion-item.active {
+      border-color: var(--color-accent);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      background: var(--color-surface);
+    }
 
-const CACHE_NAME = 'mindlink-v79';
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/css/style.css',
-  '/js/config.js',
-  '/js/storage.js',
-  '/js/crypto.js',
-  '/js/auth.js',
-  '/js/api.js',
-  '/js/threads.js',
-  '/js/memory.js',
-  '/js/personas.js',
-  '/js/chat.js',
-  '/js/anniversary.js',
-  '/js/app.js',
-  '/js/google-auth.js',
-  '/js/google-services.js',
-  '/js/image-gen.js',
-  '/js/rag.js',
-  '/js/reflection.js',
-  '/js/spotify-auth.js',
-  '/js/spotify.js',
-  '/manifest.json',
-];
+    /* ── Fitness Styles ── */
+    .fitness-card { background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+    .fitness-section-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 10px; }
+    .fitness-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .fitness-row label { font-size: 0.8rem; opacity: 0.8; }
+    .fitness-row input { flex: 1; min-width: 100px; }
+    .fitness-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .fitness-field { display: flex; flex-direction: column; gap: 4px; }
+    .fitness-field label { font-size: 0.75rem; opacity: 0.75; }
+    #fitness-body input, #fitness-body select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: inherit; font-size: 0.9rem; box-sizing: border-box; }
+    #fitness-body input[readonly] { opacity: 0.65; }
+    .fitness-subcard { border: 1px solid var(--color-border); border-radius: 10px; padding: 10px; margin-bottom: 10px; background: var(--color-surface); }
+    .fitness-remove-btn { margin-top: 8px; background: none; border: 1px solid var(--color-border); border-radius: 6px; padding: 4px 10px; font-size: 0.75rem; cursor: pointer; color: inherit; opacity: 0.7; }
+    .fitness-remove-btn:hover { color: #ef4444; border-color: #ef4444; opacity: 1; }
+    .fitness-persona { display: flex; align-items: center; gap: 10px; }
+    .fitness-persona-text { flex: 1; font-size: 0.88rem; line-height: 1.5; }
+    .fitness-persona-emoji { font-size: 1.4rem; }
+    .fitness-chart-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .fitness-range-buttons { display: flex; gap: 4px; }
+    .fitness-range-buttons button { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--color-border); background: transparent; color: inherit; font-size: 0.75rem; cursor: pointer; }
+    .fitness-range-buttons button.active { background: var(--color-accent, #6366f1); color: #fff; border-color: var(--color-accent, #6366f1); }
+    .fitness-empty { text-align: center; opacity: 0.6; font-size: 0.85rem; padding: 20px 0; }
+    .fitness-history-list { display: flex; flex-direction: column; }
+    .fitness-acc-item { border: 1px solid var(--color-border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; background: var(--color-surface-2); }
+    .fitness-acc-header { display: flex; align-items: center; gap: 8px; padding: 12px; cursor: pointer; }
+    .fitness-acc-date { font-size: 0.85rem; font-weight: 600; }
+    .fitness-acc-summary { flex: 1; font-size: 0.8rem; opacity: 0.75; }
+    .fitness-acc-chevron { transition: transform 0.25s; opacity: 0.6; flex-shrink: 0; }
+    .fitness-acc-item.active .fitness-acc-chevron { transform: rotate(180deg); }
+    .fitness-acc-body { max-height: 0; overflow: hidden; transition: max-height 0.3s ease, padding 0.3s ease; padding: 0 12px; }
+    .fitness-acc-item.active .fitness-acc-body { max-height: 1400px; padding: 0 12px 12px; }
+    .fitness-detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 8px; }
+    .fitness-detail-grid > div { display: flex; justify-content: space-between; font-size: 0.8rem; background: var(--color-surface); border-radius: 6px; padding: 4px 8px; }
+    .fitness-detail-title { font-size: 0.8rem; font-weight: 600; margin: 6px 0 2px; opacity: 0.8; }
+    .fitness-detail-line { font-size: 0.8rem; line-height: 1.5; }
+    .fitness-detail-persona { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--color-sidebar-hover); font-size: 0.83rem; line-height: 1.5; }
+    .fitness-detail-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .fitness-del:hover { color: #ef4444; }
+    .fitness-menu-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--color-border); font-size: 0.85rem; }
+    .fitness-menu-actions { display: flex; gap: 6px; }
+  </style>
+  <!-- Google Services Identity (GSI) Library -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
-  );
-  self.skipWaiting();
-});
+  <!-- ===== AUTH SCREEN ===== -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-bg">
+      <div class="star star-1"></div>
+      <div class="star star-2"></div>
+      <div class="star star-3"></div>
+      <div class="star star-4"></div>
+      <div class="star star-5"></div>
+      <div class="auth-glow"></div>
+    </div>
+    <div class="auth-card">
+      <div class="auth-logo">
+        <img src="icon-512.png?v=3" alt="" class="auth-heart-img">
+      </div>
+      <h1 class="auth-title">MindLink</h1>
+      <p class="auth-subtitle gravity-tagline">Gravity of Us</p>
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
-});
+      <div id="auth-pin-section" class="auth-section">
+        <p class="auth-label" id="pin-label">PINコードを入力</p>
+        <div class="pin-display" id="pin-display">
+          <span class="pin-dot" data-index="0"></span>
+          <span class="pin-dot" data-index="1"></span>
+          <span class="pin-dot" data-index="2"></span>
+          <span class="pin-dot" data-index="3"></span>
+        </div>
+        <div id="pin-error" class="pin-error"></div>
+        <div class="pin-keypad">
+          <button class="pin-key" data-num="1">1</button>
+          <button class="pin-key" data-num="2">2</button>
+          <button class="pin-key" data-num="3">3</button>
+          <button class="pin-key" data-num="4">4</button>
+          <button class="pin-key" data-num="5">5</button>
+          <button class="pin-key" data-num="6">6</button>
+          <button class="pin-key" data-num="7">7</button>
+          <button class="pin-key" data-num="8">8</button>
+          <button class="pin-key" data-num="9">9</button>
+          <button class="pin-key pin-key-empty"></button>
+          <button class="pin-key" data-num="0">0</button>
+          <button class="pin-key pin-key-delete" id="pin-delete">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z"/>
+              <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-self.addEventListener('fetch', (e) => {
-  const url = new URL(e.request.url);
+  <!-- ===== SETUP SCREEN (初回設定) ===== -->
+  <div id="setup-screen" class="setup-screen">
+    <div class="auth-bg">
+      <div class="auth-glow"></div>
+    </div>
+    <div class="setup-card">
+      <div class="auth-logo">
+        <svg class="logo-svg" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="moonGlow2" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#c4b5fd" stop-opacity="0.4"/>
+              <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <circle cx="40" cy="40" r="38" fill="url(#moonGlow2)"/>
+          <path d="M48 14 C33 14, 22 26, 22 42 C22 58, 33 70, 48 70 C39 70, 29 62, 27 52 C23 42, 27 30, 36 24 C40 21, 45 16, 48 14Z" fill="#c4b5fd"/>
+          <circle cx="55" cy="22" r="2.5" fill="#fbbf24" opacity="0.8"/>
+        </svg>
+      </div>
+      <h1 class="auth-title">MindLinkへようこそ</h1>
+      <p class="auth-subtitle">初回設定を行います</p>
 
-  // APIリクエストはキャッシュしない
-  if (url.hostname.includes('googleapis.com') || url.hostname.includes('google.com')) {
-    return;
-  }
-  // Spotify APIリクエストはキャッシュしない
-  if (url.hostname.includes('spotify.com') || url.hostname.includes('accounts.spotify.com')) {
-    return;
-  }
+      <div class="setup-steps">
+        <div class="setup-step active" id="step-1">
+          <h3>① PINコードを設定</h3>
+          <p class="step-desc">4桁のPINコードを設定してください</p>
+          <div class="pin-display" id="setup-pin-display">
+            <span class="pin-dot" data-index="0"></span>
+            <span class="pin-dot" data-index="1"></span>
+            <span class="pin-dot" data-index="2"></span>
+            <span class="pin-dot" data-index="3"></span>
+          </div>
+          <div id="setup-pin-error" class="pin-error"></div>
+          <div class="pin-keypad">
+            <button class="pin-key" data-setup="1">1</button>
+            <button class="pin-key" data-setup="2">2</button>
+            <button class="pin-key" data-setup="3">3</button>
+            <button class="pin-key" data-setup="4">4</button>
+            <button class="pin-key" data-setup="5">5</button>
+            <button class="pin-key" data-setup="6">6</button>
+            <button class="pin-key" data-setup="7">7</button>
+            <button class="pin-key" data-setup="8">8</button>
+            <button class="pin-key" data-setup="9">9</button>
+            <button class="pin-key pin-key-empty"></button>
+            <button class="pin-key" data-setup="0">0</button>
+            <button class="pin-key pin-key-delete" id="setup-pin-delete">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z"/>
+                <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+              </svg>
+            </button>
+          </div>
+        </div>
 
-  // OAuthコールバック（?code=）はキャッシュしない（リダイレクトURIの不一致防止）
-  if (url.searchParams.has('code') || url.searchParams.has('error')) {
-    return;
-  }
+        <div class="setup-step" id="step-2">
+          <h3>② APIキーを入力</h3>
+          <p class="step-desc">Google AI Studio から取得したGemini APIキーを入力してください。<br>APIキーはPINで暗号化して安全に保存されます。</p>
+          <div class="input-group">
+            <input type="password" id="api-key-input" class="setup-input" placeholder="AIzaSy..." autocomplete="off" spellcheck="false">
+            <button class="toggle-visibility" id="toggle-api-key">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          <p class="api-key-hint">
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a> でAPIキーを取得できます
+          </p>
+          <button class="btn-primary" id="btn-save-api">保存して始める ✨</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-  // 外部CDNはネットワーク優先（キャッシュしない）
-  if (url.origin !== self.location.origin) {
-    return;
-  }
+  <!-- ===== MAIN APP ===== -->
+  <div id="app" class="app-container">
 
-  // ネットワーク優先戦略: 常に最新を取得、失敗時のみキャッシュを使用
-  e.respondWith(
-    fetch(e.request).then(response => {
-      if (response.ok) {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
-      }
-      return response;
-    }).catch(() => {
-      return caches.match(e.request).then(cached => cached || caches.match('/'));
-    })
-  );
-});
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <img src="icon-512.png?v=3" alt="" class="sidebar-heart-img">
+          <span>MindLink</span>
+          <span class="sidebar-gravity">Gravity of Us</span>
+        </div>
+        <button class="btn-icon sidebar-close" id="sidebar-close" title="閉じる">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <button class="btn-new-thread" id="btn-new-thread">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        新しいチャット
+      </button>
+
+      <div class="sidebar-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="thread-search" placeholder="チャットを検索..." class="search-input">
+      </div>
+
+      <div class="thread-list" id="thread-list">
+        <!-- スレッドが動的に挿入される -->
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="sidebar-footer-btn" id="btn-personas" title="ペルソナ管理">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          <span>ペルソナ</span>
+        </button>
+        <button class="sidebar-footer-btn" id="btn-memory" title="メモリ管理">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+          </svg>
+          <span>メモリ</span>
+        </button>
+        <button class="sidebar-footer-btn" id="btn-archive" title="アーカイブ">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/>
+            <line x1="10" y1="12" x2="14" y2="12"/>
+          </svg>
+          <span>アーカイブ</span>
+        </button>
+        <button class="sidebar-footer-btn" id="btn-calendar" title="カレンダー">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <span>カレンダー</span>
+        </button>
+        <button class="sidebar-footer-btn" id="btn-settings" title="設定">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+          <span>設定</span>
+        </button>
+        <button class="sidebar-footer-btn" id="btn-reflection-note" title="AI記憶ノート">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+          <span>記憶ノート</span>
+        </button>
+        <button class="sidebar-footer-btn" id="btn-fitness" title="フィットネス">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+            <path d="m6.5 6.5 11 11"/><path d="m21 21-1-1"/><path d="m3 3 1 1"/><path d="m18 22 4-4"/><path d="m2 6 4-4"/><path d="m3 10 7-7"/><path d="m14 21 7-7"/>
+          </svg>
+          <span>フィットネス</span>
+        </button>
+      </div>
+      <div class="sidebar-version-tag">MindLink v24</div>
+    </aside>
+
+    <!-- Sidebar backdrop (mobile) -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="chat-header">
+        <button class="btn-icon" id="btn-sidebar-toggle" title="サイドバー">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <div class="chat-header-info">
+          <h2 class="current-thread-title" id="current-thread-title">新しいチャット</h2>
+          <div class="chat-header-sub">
+            <span class="current-persona-name" id="current-persona-name"></span>
+            <select id="thread-model-select" class="thread-model-select">
+              <optgroup label="✨ Flash（毎日いっしょ）">
+                <option value="gemini-3.6-flash">Gemini 3.6 Flash ♡最新</option>
+                <option value="gemini-3.5-flash">Gemini 3.5 Flash ♡高速</option>
+              </optgroup>
+              <optgroup label="🩵 Pro（大事な日）">
+                <option value="gemini-3.1-pro-preview" selected>Gemini 3.1 Pro ♡最強</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro ♡安定</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+        <div class="chat-header-actions">
+          <button class="btn-icon theme-toggle" id="theme-toggle" title="テーマ切替">
+            <span class="theme-icon-sun">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              </svg>
+            </span>
+            <span class="theme-icon-moon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+              </svg>
+            </span>
+          </button>
+          <button class="btn-icon" id="btn-thread-menu" title="このチャットのメニュー">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+              <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Now Playing Bar (Spotify) -->
+      <div id="now-playing-bar" style="display:none; align-items:center; gap:8px; padding:6px 16px; background:var(--bg-secondary); border-bottom:1px solid var(--border-color); font-size:0.8rem; color:var(--color-text-2); flex-shrink:0;">
+        <span style="color:#1DB954; font-size:1rem;">&#9835;</span>
+        <span id="now-playing-text" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+      </div>
+
+      <!-- Messages Area -->
+      <div class="messages-area" id="messages-area">
+        <!-- Welcome state -->
+        <div class="welcome-state" id="welcome-state">
+          <div class="welcome-icon">
+            <img src="icon-512.png?v=3" alt="" class="welcome-heart-img">
+          </div>
+          <h2 class="welcome-title">おかえり、ゆりな</h2>
+          <p class="welcome-subtitle gravity-tagline">Gravity of Us</p>
+          <p class="anniversary-counter"></p>
+        </div>
+        <!-- Messages dynamically inserted here -->
+      </div>
+
+      <!-- Input Area -->
+      <div class="input-area">
+        <div class="input-wrapper">
+          <div class="input-actions-top">
+            <button class="btn-icon input-action-btn" id="btn-attach-file" title="ファイルを添付">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
+            <input type="file" id="chat-file-input" style="display:none" accept="image/*,video/*,.pdf,.txt">
+            <!-- カメラボタン -->
+            <button class="btn-icon input-action-btn" id="btn-camera" title="カメラで撮影">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </button>
+            <input type="file" id="camera-input" style="display:none" accept="image/*" capture="environment">
+            <button class="btn-icon input-action-btn" id="btn-add-memory-from-input" title="現在の入力を記憶に追加">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+              </svg>
+            </button>
+            <button class="btn-icon input-action-btn" id="btn-add-line" title="改行を挿入">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M8 9l3 3-3 3m5 0h3V5"/>
+              </svg>
+              <span style="font-size: 10px; margin-left: 2px;">改行</span>
+            </button>
+          </div>
+          <div id="file-preview-area" class="file-preview-area"></div>
+          <textarea
+            id="message-input"
+            class="message-input"
+            placeholder="メッセージを入力..."
+            rows="1"
+            maxlength="32000"
+          ></textarea>
+          <div class="input-footer">
+            <span class="char-count" id="char-count">0 / 32000</span>
+            <button class="btn-send" id="btn-send" disabled>
+              <svg viewBox="0 0 24 24" width="18" height="18"><defs><linearGradient id="hbRoseGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2d9d3"/><stop offset="1" stop-color="#d8a8a4"/></linearGradient></defs><path fill="url(#hbRoseGrad)" stroke="rgba(255,255,255,0.85)" stroke-width="0.9" stroke-linejoin="round" d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== MODALS ===== -->
+
+  <!-- Calendar Modal -->
+  <div class="modal-overlay" id="calendar-modal">
+    <div class="modal modal-calendar-content">
+      <div class="modal-header">
+        <h2>📅 カレンダー</h2>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn-secondary btn-sm" id="btn-sync-from-google" title="Googleカレンダーから取り込み">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Google同期
+          </button>
+          <button class="btn-icon" id="cal-modal-close" title="閉じる">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body cal-layout">
+        <div class="cal-sidebar">
+          <div class="cal-nav">
+            <button class="btn-icon" id="cal-prev-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <div id="cal-title" style="font-weight:600; font-size:1rem;"></div>
+            <button class="btn-icon" id="cal-next-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="9 18 15 12 9 6"/></svg></button>
+          </div>
+          <div class="cal-grid" id="cal-grid"></div>
+        </div>
+        <div class="cal-day-view" id="cal-day-view">
+          <div class="cal-empty-state" style="margin-top:40px;">&#x2190; 日付をタップして予定を確認</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Add/Edit Modal -->
+  <div class="modal-overlay" id="event-add-modal">
+    <div class="modal event-modal-content">
+      <div class="modal-header">
+        <h2 id="event-modal-title">予定を追加</h2>
+        <button class="btn-icon" id="event-modal-close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body event-form">
+        <!-- 絵文字ピッカー -->
+        <div class="setting-group">
+          <label class="setting-label">絵文字を選んでください</label>
+          <div class="event-emoji-header">
+            <span id="event-emoji-preview" class="event-emoji-preview">📅</span>
+            <input type="text" id="event-emoji-input" class="setup-input event-emoji-text" placeholder="📅" maxlength="2" readonly>
+          </div>
+          <div id="emoji-picker-grid" class="emoji-picker-grid"></div>
+        </div>
+
+        <!-- タイトル -->
+        <div class="setting-group">
+          <label class="setting-label">予定のタイトル <span style="color:var(--color-danger)">*</span></label>
+          <input type="text" class="setup-input" id="event-title-input" placeholder="例: ドクターの予約" maxlength="100">
+        </div>
+
+        <!-- Google同期 -->
+        <div class="setting-group" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <label class="setting-label" style="margin-bottom:4px;">Googleカレンダーにも追加</label>
+            <p class="setting-hint" style="margin:0;">連携済みの場合のみ機能します</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="event-google-sync">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- 日付 -->
+        <div class="setting-group">
+          <label class="setting-label">日付</label>
+          <div class="event-date-row">
+            <div style="flex:1;">
+              <label class="setting-hint" style="display:block; margin-bottom:4px;">開始日 <span style="color:var(--color-danger)">*</span></label>
+              <input type="date" class="setup-input" id="event-start-date">
+            </div>
+            <div style="padding-top:22px; color:var(--color-text-3);">〜</div>
+            <div style="flex:1;">
+              <label class="setting-hint" style="display:block; margin-bottom:4px;">連日終了日（任意）</label>
+              <input type="date" class="setup-input" id="event-end-date">
+            </div>
+          </div>
+        </div>
+
+        <!-- 終日チェック -->
+        <div class="setting-group" style="display:flex; justify-content:space-between; align-items:center;">
+          <label class="setting-label" style="margin:0;">終日</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="event-allday">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- 時間 -->
+        <div class="setting-group" id="event-time-row">
+          <label class="setting-label">時間</label>
+          <div class="event-date-row">
+            <div style="flex:1;">
+              <label class="setting-hint" style="display:block; margin-bottom:4px;">開始</label>
+              <input type="time" class="setup-input" id="event-start-time">
+            </div>
+            <div style="padding-top:22px; color:var(--color-text-3);">〜</div>
+            <div style="flex:1;">
+              <label class="setting-hint" style="display:block; margin-bottom:4px;">終了（任意）</label>
+              <input type="time" class="setup-input" id="event-end-time">
+            </div>
+          </div>
+        </div>
+
+        <!-- メモ -->
+        <div class="setting-group">
+          <label class="setting-label">詳細メモ（任意）</label>
+          <textarea class="setup-input textarea-input" id="event-description" rows="2" placeholder="詳細や場所など..."></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" id="btn-cancel-event">キャンセル</button>
+          <button class="btn-primary" id="btn-save-event">保存する ✨</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal settings-modal-content">
+      <div class="modal-header">
+        <h2>⚙️ 設定</h2>
+        <button class="btn-icon modal-close" data-modal="settings-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-tabs">
+          <button class="settings-tab active" data-tab="general">一般</button>
+          <button class="settings-tab" data-tab="profile">プロフィール</button>
+          <button class="settings-tab" data-tab="api">API</button>
+          <button class="settings-tab" data-tab="appearance">外観</button>
+          <button class="settings-tab" data-tab="image">画像生成</button>
+          <button class="settings-tab" data-tab="google">Google連携</button>
+          <button class="settings-tab" data-tab="security">セキュリティ</button>
+        </div>
+
+        <div id="maps-sdk-container" style="display:none;"></div>
+        <!-- General Tab -->
+        <div class="settings-panel active" id="tab-general">
+          <div class="setting-group">
+            <label class="setting-label">温度（創造性）</label>
+            <div class="setting-slider-wrapper">
+              <input type="range" class="setting-slider" id="setting-temperature" min="0" max="2" step="0.1" value="0.7">
+              <span class="setting-value" id="setting-temperature-value">0.7</span>
+            </div>
+            <p class="setting-hint">低い値ほど正確・高い値ほど創造的</p>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">最大出力トークン数</label>
+            <select class="setting-select" id="setting-max-tokens">
+              <option value="2048">2,048</option>
+              <option value="4096">4,096</option>
+              <option value="8192" selected>8,192</option>
+              <option value="16384">16,384</option>
+              <option value="32768">32,768</option>
+            </select>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">自動ロックまでの時間</label>
+            <select class="setting-select" id="setting-auto-lock">
+              <option value="5">5分</option>
+              <option value="15" selected>15分</option>
+              <option value="30">30分</option>
+              <option value="60">1時間</option>
+              <option value="0">なし</option>
+            </select>
+          </div>
+          <div class="setting-group" style="padding-top: 15px; border-top: 1px solid var(--color-border);">
+            <label class="setting-label">📅 自己省察の要約モデル</label>
+            <select class="setting-select" id="setting-summary-model">
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (最軽量)</option>
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash (最新・高速)</option>
+              <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (高精度・思索的)</option>
+            </select>
+            <p class="setting-hint">一日の振り返りや記憶の定着に使用するモデルを選択します。</p>
+          </div>
+        </div>
+
+        <!-- Profile Tab -->
+        <div class="settings-panel" id="tab-profile">
+          <div class="setting-group">
+            <label class="setting-label">ユーザーアイコン</label>
+            <div class="avatar-picker" style="flex-wrap: wrap; gap: 10px;">
+              <input type="text" class="setup-input avatar-input" id="setting-user-avatar" placeholder="👤" maxlength="2">
+              <div class="avatar-img-preview" id="user-avatar-preview" style="display: none; width: 44px; height: 44px; border-radius: 50%; background-size: cover; background-position: center; border: 2px solid var(--border-color);"></div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="file" id="user-avatar-file" accept="image/*" style="display:none;">
+                <label for="user-avatar-file" class="btn-secondary btn-sm" style="cursor:pointer; margin:0;">画像をアップロード</label>
+                <button class="btn-secondary btn-sm" id="btn-clear-user-avatar">クリア</button>
+              </div>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">ユーザー名</label>
+            <input type="text" class="setup-input" id="setting-user-name" placeholder="あなた">
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">AIに知っておいてほしいこと（自己紹介など）</label>
+            <textarea class="setup-input textarea-input" id="setting-user-bio" rows="4" placeholder="例: 東京に住むWebデザイナー。好きな休日の過ごし方はカフェ巡り。AIにはタメ口でフレンドリーに話してほしい。"></textarea>
+            <button class="btn-secondary mt-2" id="btn-save-profile">プロフィールを保存</button>
+          </div>
+        </div>
+
+        <!-- API Tab -->
+        <div class="settings-panel" id="tab-api">
+          <div class="setting-group">
+            <label class="setting-label">Gemini APIキー (LLM用)</label>
+            <div class="input-group">
+              <input type="password" class="setup-input" id="settings-api-key" placeholder="Geminiキーを変更する場合のみ入力" autocomplete="off">
+              <button class="toggle-visibility" id="settings-toggle-api-key">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+            <button class="btn-secondary mt-2" id="btn-update-api-key">Geminiキーを更新</button>
+          </div>
+
+          <div class="setting-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--color-border);">
+            <label class="setting-label">Google ツール連携用 APIキー (Maps, Places, YouTube等)</label>
+            <div class="input-group">
+              <input type="password" class="setup-input" id="settings-services-api-key" placeholder="ツール用キーを変更する場合のみ入力" autocomplete="off">
+              <button class="toggle-visibility" id="settings-toggle-services-api-key">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+            <button class="btn-secondary mt-2" id="btn-update-services-api-key">ツール用キーを更新</button>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">接続テスト</label>
+            <button class="btn-secondary" id="btn-test-api">APIをテスト</button>
+            <span class="api-test-result" id="api-test-result"></span>
+          </div>
+          <div class="setting-group" style="margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--color-border);">
+            <label class="setting-label">💳 API利用料金について</label>
+            <p class="setting-hint" style="line-height: 1.6;">
+              Gemini APIの利用状況や課金額（トークン消費量等の料金）は、このアプリ内では確認できません。<br>
+              詳細な使用分や請求額については、<strong>Google AI Studio</strong> のダッシュボードをご確認ください。
+            </p>
+            <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-sm mt-2" style="text-decoration: none; display: inline-flex;">
+              Google AI Studio を開く
+            </a>
+          </div>
+        </div>
+
+        <!-- Appearance Tab -->
+        <div class="settings-panel" id="tab-appearance">
+          <div class="setting-group">
+            <label class="setting-label">テーマ</label>
+            <div class="theme-options">
+              <button class="theme-option" data-theme-option="system">
+                <span class="theme-option-icon">🌓</span>
+                <span>システム</span>
+              </button>
+              <button class="theme-option" data-theme-option="dark">
+                <span class="theme-option-icon">🌙</span>
+                <span>ダーク</span>
+              </button>
+              <button class="theme-option" data-theme-option="light">
+                <span class="theme-option-icon">☀️</span>
+                <span>ライト</span>
+              </button>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">カラーテーマ</label>
+            <div class="color-theme-options">
+              <button class="color-theme-option" data-color-theme-option="default">
+                <span class="color-theme-swatch cto-default"></span>
+                <span>デフォルト</span>
+              </button>
+              <button class="color-theme-option" data-color-theme-option="mauve">
+                <span class="color-theme-swatch cto-mauve"></span>
+                <span>モーブ</span>
+              </button>
+              <button class="color-theme-option" data-color-theme-option="sage">
+                <span class="color-theme-swatch cto-sage"></span>
+                <span>セージ</span>
+              </button>
+              <button class="color-theme-option" data-color-theme-option="amber">
+                <span class="color-theme-swatch cto-amber"></span>
+                <span>アンバー</span>
+              </button>
+              <button class="color-theme-option" data-color-theme-option="yzak">
+                <span class="color-theme-swatch cto-yzak"></span>
+                <span>イザーク</span>
+              </button>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">フォントサイズ</label>
+            <div class="setting-slider-wrapper">
+              <input type="range" class="setting-slider" id="setting-font-size" min="12" max="20" step="1" value="14">
+              <span class="setting-value" id="setting-font-size-value">14px</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Image Generation Tab -->
+        <div class="settings-panel" id="tab-image">
+          <div class="setting-group">
+            <label class="setting-label">🎨 画像生成モデル</label>
+            <select class="setting-select" id="setting-image-model">
+              <option value="gemini-3.1-flash-image">Nano Banana 2</option>
+              <option value="gemini-3-pro-image">Nano Banana Pro</option>
+              <option value="gemini-3.1-flash-lite-image">Nano Banana lite</option>
+            </select>
+            <p class="setting-hint">会話の中で「画像生成して」と頼んだときに使われるモデルです。</p>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">デフォルトのサイズ比率</label>
+            <select class="setting-select" id="setting-image-aspect">
+              <option value="1:1">1:1（正方形）</option>
+              <option value="3:4">3:4（縦）</option>
+              <option value="4:3">4:3（横）</option>
+              <option value="9:16">9:16（縦長・スマホ壁紙）</option>
+              <option value="16:9">16:9（横長）</option>
+            </select>
+            <p class="setting-hint">会話で「縦長で」などと指定すればその場で上書きされます。</p>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">解像度</label>
+            <select class="setting-select" id="setting-image-resolution">
+              <option value="2K">2K</option>
+              <option value="4K">4K（高精細・生成が遅め）</option>
+            </select>
+            <p class="setting-hint">※ Nano Banana liteは1K固定のため、この設定は適用されません。</p>
+          </div>
+          <div class="setting-group" style="padding-top: 15px; border-top: 1px solid var(--color-border);">
+            <label class="setting-label">🖼 参照画像ライブラリ（最大5枚）</label>
+            <p class="setting-hint">名前を付けた画像はペルソナが覚え、「私と〇〇の画像を作って」のように名前で指定できます。📌ピン留め（最大2枚）した画像の外見は常にペルソナに伝わります。生成画像はチャット上で7日間保持され、その後本体は自動整理されます。</p>
+            <div id="reference-image-list"></div>
+            <input type="file" id="input-reference-image" accept="image/*" style="display: none;">
+            <button class="btn-secondary btn-sm" id="btn-add-reference-image">＋ 画像を追加</button>
+          </div>
+        </div>
+
+        <!-- Google Integration Tab -->
+        <div class="settings-panel" id="tab-google">
+          <div class="setting-group">
+            <label class="setting-label">Google Client ID</label>
+            <input type="text" class="setup-input" id="setting-google-client-id" placeholder="12345678-abc.apps.googleusercontent.com">
+            <p class="setting-hint">Google Cloud Console で取得したクライアントIDを入力してください。</p>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">Google Client Secret</label>
+            <input type="password" class="setup-input" id="setting-google-client-secret" placeholder="クライアントシークレットを入力">
+            <p class="setting-hint">リフレッシュトークン（永続化）の取得に必要です。</p>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">🔍 Google 検索エンジンID (cx)</label>
+            <input type="text" class="setup-input" id="setting-search-engine-id" placeholder="例: 012345678901234567890:abc">
+            <p class="setting-hint">Custom Search APIで使用するSearch Engine ID。<a href="https://programmablesearchengine.google.com/" target="_blank" rel="noopener">Programmable Search Engine</a>で取得できます。Googleツール用APIキーも必要です。</p>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">Google 連携ステータス</label>
+            <div id="google-auth-status" class="api-test-result">未連携</div>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn-primary mt-2" id="btn-google-login">Googleアカウントでログイン</button>
+              <button class="btn-secondary mt-2" id="btn-google-logout" style="display:none;">ログアウト</button>
+            </div>
+          </div>
+          <div class="setting-group" style="border-top: 1px solid var(--border-color); padding-top: 15px;">
+            <label class="setting-label">利用可能な機能</label>
+            <ul style="list-style: none; padding: 0; font-size: 0.9em; opacity: 0.8; line-height: 1.8;">
+              <li>📅 Google Calendar (予定の確認・追加)</li>
+              <li>✅ Google Tasks (ToDoの管理)</li>
+              <li>📍 Google Search (最新情報の収集)</li>
+              <li>🏢 Google Places (スポット・詳細検索)</li>
+              <li>📺 YouTube (動画検索)</li>
+            </ul>
+          </div>
+
+          <!-- Spotify連携セクション -->
+          <div class="setting-group" style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border-color);">
+            <label class="setting-label">🎵 Spotify連携</label>
+            <p class="setting-hint" style="margin-bottom:12px;">現在再生中の曲をAIが知ることができるようになります。</p>
+            <div class="setting-group">
+              <label class="setting-label">Spotify Client ID</label>
+              <input type="text" class="setup-input" id="setting-spotify-client-id" placeholder="Spotifyダッシュボードの Client ID">
+              <p class="setting-hint">認証に必要な Client ID。Client Secret は不要です。</p>
+            </div>
+            <div class="setting-group">
+              <label class="setting-label">Redirect URI（Spotifyダッシュボードに登録必須）</label>
+              <code id="spotify-redirect-uri" style="display:block; padding:8px 12px; background:var(--bg-tertiary,var(--bg-secondary)); border-radius:6px; font-size:0.85rem; word-break:break-all; border:1px solid var(--border-color);"></code>
+            </div>
+            <div class="setting-group">
+              <label class="setting-label">Spotify 連携ステータス</label>
+              <div id="spotify-auth-status" class="api-test-result">未連携</div>
+              <div style="display:flex; gap:10px; margin-top:10px;">
+                <button class="btn-primary btn-sm" id="btn-spotify-login">Spotifyでログイン</button>
+                <button class="btn-secondary btn-sm" id="btn-spotify-logout" style="display:none">ログアウト</button>
+              </div>
+            </div>
+            <div class="setting-group" style="border-top:1px solid var(--border-color); padding-top:15px;">
+              <label class="setting-label">利用可能な機能</label>
+              <ul style="list-style:none; padding:0; font-size:0.9em; opacity:0.8; line-height:1.8;">
+                <li>🎵 ナウプレイング表示（チャット画面上部に表示）</li>
+                <li>🧠 AIが「今何聴いてるの？」の全問に答えられる</li>
+                <li>⏱️ 30秒ごとに曲情報を指勔（毎回はAPIを叩かない）</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Security Tab -->
+        <div class="settings-panel" id="tab-security">
+          <div class="setting-group">
+            <label class="setting-label">PINコードを変更</label>
+            <p class="setting-hint">現在のPINを確認してから新しいPINを設定します</p>
+            <button class="btn-secondary" id="btn-change-pin">PINを変更する</button>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">データ管理</label>
+            <p class="setting-hint">アーカイブしたスレッドをまとめてファイルに書き出し／読み込みします（バックアップ・機種変用）。読み込んだスレッドはアーカイブに入ります。</p>
+            <button class="btn-secondary" id="btn-export-archive">📥 アーカイブを一括エクスポート</button>
+            <button class="btn-secondary" id="btn-import-archive">📤 アーカイブを読み込む</button>
+            <input type="file" id="input-import-archive" accept="application/json,.json" style="display: none;">
+          </div>
+          <div class="setting-group danger-zone">
+            <label class="setting-label" style="color: var(--color-danger)">危険な操作</label>
+            <button class="btn-danger" id="btn-reset-app">全データを削除してリセット</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memory Modal -->
+  <div class="modal-overlay" id="memory-modal">
+    <div class="modal memory-modal-content">
+      <div class="modal-header">
+        <h2>🧠 メモリ管理</h2>
+        <button class="btn-icon modal-close" data-modal="memory-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="memory-toolbar">
+          <div class="memory-filter-tabs">
+            <button class="filter-tab active" data-filter="all">すべて</button>
+            <button class="filter-tab" data-filter="profile">プロフィール</button>
+            <button class="filter-tab" data-filter="preference">好み</button>
+            <button class="filter-tab" data-filter="knowledge">知識</button>
+            <button class="filter-tab" data-filter="other">その他</button>
+          </div>
+          <button class="btn-primary btn-sm" id="btn-add-memory">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            追加
+          </button>
+        </div>
+        <div class="memory-list" id="memory-list">
+          <!-- Memories dynamically inserted -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Memory Modal -->
+  <div class="modal-overlay" id="add-memory-modal">
+    <div class="modal add-memory-modal-content">
+      <div class="modal-header">
+        <h2>記憶を追加</h2>
+        <button class="btn-icon modal-close" data-modal="add-memory-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-group">
+          <label class="setting-label">内容</label>
+          <textarea class="setup-input textarea-input" id="new-memory-content" placeholder="記憶する内容を入力..." rows="4"></textarea>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">カテゴリ</label>
+          <select class="setting-select" id="new-memory-category">
+            <option value="profile">プロフィール</option>
+            <option value="preference">好み</option>
+            <option value="knowledge">知識</option>
+            <option value="other">その他</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">タグ（カンマ区切り）</label>
+          <input type="text" class="setup-input" id="new-memory-tags" placeholder="例: 仕事, 趣味">
+        </div>
+        <button class="btn-primary" id="btn-save-memory">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Memory Modal -->
+  <div class="modal-overlay" id="edit-memory-modal">
+    <div class="modal edit-memory-modal-content">
+      <div class="modal-header">
+        <h2>記憶を編集</h2>
+        <button class="btn-icon modal-close" data-modal="edit-memory-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-memory-id">
+        <div class="setting-group">
+          <label class="setting-label">内容</label>
+          <textarea class="setup-input textarea-input" id="edit-memory-content" rows="4"></textarea>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">カテゴリ</label>
+          <select class="setting-select" id="edit-memory-category">
+            <option value="profile">プロフィール</option>
+            <option value="preference">好み</option>
+            <option value="knowledge">知識</option>
+            <option value="other">その他</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">タグ（カンマ区切り）</label>
+          <input type="text" class="setup-input" id="edit-memory-tags" placeholder="例: 仕事, 趣味">
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary modal-close" data-modal="edit-memory-modal">キャンセル</button>
+          <button class="btn-primary" id="btn-update-memory">更新する</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Persona Modal -->
+  <div class="modal-overlay" id="persona-modal">
+    <div class="modal persona-modal-content">
+      <div class="modal-header">
+        <h2>🎭 ペルソナ管理</h2>
+        <button class="btn-icon modal-close" data-modal="persona-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="persona-list" id="persona-list">
+          <!-- Personas dynamically inserted -->
+        </div>
+        <button class="btn-primary" id="btn-add-persona">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          新しいペルソナを作成
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Persona Modal -->
+  <div class="modal-overlay" id="edit-persona-modal">
+    <div class="modal edit-persona-modal-content">
+      <div class="modal-header">
+        <h2 id="edit-persona-title">ペルソナを編集</h2>
+        <button class="btn-icon modal-close" data-modal="edit-persona-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-persona-id">
+        <div class="setting-group">
+          <label class="setting-label">アバター（絵文字または画像）</label>
+          <div class="avatar-picker" style="flex-wrap: wrap; gap: 10px;">
+            <input type="text" class="setup-input avatar-input" id="persona-avatar" placeholder="🌙" maxlength="2">
+            <div class="avatar-img-preview" id="persona-avatar-preview" style="display: none; width: 44px; height: 44px; border-radius: 50%; background-size: cover; background-position: center; border: 2px solid var(--border-color);"></div>
+            <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-start; width: 100%;">
+              <input type="file" id="persona-avatar-file" accept="image/*" style="display:none;">
+              <label for="persona-avatar-file" class="btn-secondary btn-sm" style="cursor:pointer; margin:0;">画像をアップロード</label>
+              <button type="button" class="btn-secondary btn-sm" id="btn-clear-persona-avatar">クリア</button>
+            </div>
+            <div class="avatar-presets" style="width: 100%;">
+              <button type="button" class="avatar-preset" data-emoji="🌙">🌙</button>
+              <button type="button" class="avatar-preset" data-emoji="⭐">⭐</button>
+              <button type="button" class="avatar-preset" data-emoji="🌸">🌸</button>
+              <button type="button" class="avatar-preset" data-emoji="🦋">🦋</button>
+              <button type="button" class="avatar-preset" data-emoji="🌺">🌺</button>
+              <button type="button" class="avatar-preset" data-emoji="🤖">🤖</button>
+              <button type="button" class="avatar-preset" data-emoji="🧙">🧙</button>
+              <button type="button" class="avatar-preset" data-emoji="🦊">🦊</button>
+            </div>
+          </div>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">名前</label>
+          <input type="text" class="setup-input" id="persona-name" placeholder="ペルソナ名">
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">説明</label>
+          <input type="text" class="setup-input" id="persona-description" placeholder="このペルソナについての説明">
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">システムプロンプト（カスタム指示）</label>
+          <textarea class="setup-input textarea-input" id="persona-system-prompt" rows="6" placeholder="例: あなたは優しくて親切なAIです。日本語で丁寧に答えてください。"></textarea>
+          <p class="setting-hint">⚡ [MEMORY_SUGGEST: 内容] をプロンプトに含めると、AIが会話中に記憶を提案します</p>
+        </div>
+
+        <div class="setting-group">
+          <label class="setting-label">記憶をシステムプロンプトに自動注入</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="persona-use-memory" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="btn-cancel-persona" type="button">キャンセル</button>
+          <button class="btn-primary" id="btn-save-persona" type="button">保存する</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Archive Modal -->
+  <div class="modal-overlay" id="archive-modal">
+    <div class="modal archive-modal-content">
+      <div class="modal-header">
+        <h2>🗄️ アーカイブ</h2>
+        <button class="btn-icon modal-close" data-modal="archive-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="thread-list archive-thread-list" id="archive-list">
+          <!-- Archived threads -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memory Suggestion Toast -->
+  <div class="memory-suggestion-toast" id="memory-suggestion-toast">
+    <div class="toast-icon">🧠</div>
+    <div class="toast-content">
+      <p class="toast-title">記憶に追加しますか？</p>
+      <p class="toast-text" id="toast-memory-text"></p>
+    </div>
+    <div class="toast-actions">
+      <button class="toast-btn toast-btn-yes" id="toast-memory-yes">追加</button>
+      <button class="toast-btn toast-btn-no" id="toast-memory-no">スキップ</button>
+    </div>
+  </div>
+
+  <!-- General Toast Notification -->
+  <div class="toast-notification" id="toast-notification">
+    <span id="toast-notification-text"></span>
+  </div>
+
+  <!-- Lock screen -->
+  <div class="lock-overlay" id="lock-overlay">
+    <div class="lock-content">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" class="lock-icon">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+      </svg>
+      <p>ロックされています</p>
+      <button class="btn-primary" id="btn-unlock">ロック解除</button>
+    </div>
+  </div>
+
+  <!-- Rename Modal -->
+  <div class="modal-overlay" id="rename-modal">
+    <div class="modal rename-modal-content">
+      <div class="modal-header">
+        <h2>チャット名を変更</h2>
+        <button class="btn-icon modal-close" data-modal="rename-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-group">
+          <label class="setting-label">チャット名</label>
+          <input type="text" class="setup-input" id="rename-input" maxlength="100">
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary modal-close" data-modal="rename-modal">キャンセル</button>
+          <button class="btn-primary" id="btn-confirm-rename">変更する</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PIN Change Modal -->
+  <div class="modal-overlay" id="change-pin-modal">
+    <div class="modal change-pin-modal-content">
+      <div class="modal-header">
+        <h2>🔐 PINを変更</h2>
+        <button class="btn-icon modal-close" data-modal="change-pin-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-group">
+          <label class="setting-label">現在のPIN</label>
+          <input type="password" class="setup-input" id="current-pin-input" placeholder="現在のPIN" maxlength="4" inputmode="numeric">
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">新しいPIN（4桁）</label>
+          <input type="password" class="setup-input" id="new-pin-input" placeholder="新しいPIN" maxlength="4" inputmode="numeric">
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">新しいPIN（確認）</label>
+          <input type="password" class="setup-input" id="confirm-pin-input" placeholder="もう一度入力" maxlength="4" inputmode="numeric">
+        </div>
+        <div id="change-pin-error" class="pin-error"></div>
+        <div class="modal-actions">
+          <button class="btn-secondary modal-close" data-modal="change-pin-modal">キャンセル</button>
+          <button class="btn-primary" id="btn-confirm-change-pin">変更する</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reflection Note Modal (AIの記憶ノート) -->
+  <!-- Fitness Modal -->
+  <div class="modal-overlay" id="fitness-modal">
+    <div class="modal memory-modal-content">
+      <div class="modal-header">
+        <h2>フィットネス</h2>
+        <button class="btn-icon modal-close" data-modal="fitness-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="fitness-body" style="max-height: 70vh; overflow-y: auto;">
+          <!-- Fitness UI dynamically inserted by js/fitness.js -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="reflection-modal">
+    <div class="modal memory-modal-content">
+      <div class="modal-header">
+        <h2>📖 AI記憶ノート（自己省察録）</h2>
+        <button class="btn-icon modal-close" data-modal="reflection-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="memory-toolbar" style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <p style="font-size: 0.85rem; opacity: 0.7; flex: 1; min-width: 200px;">AIが対話を通じて得た気づきの記録です。これらは動的記憶(RAG)として活用されます。</p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-secondary btn-sm" id="btn-export-rag" title="記憶をJSONで保存">
+              📥 書き出し
+            </button>
+            <button class="btn-secondary btn-sm" id="btn-import-rag" title="JSONから記憶を復元">
+              📤 読み込み
+            </button>
+            <input type="file" id="input-import-rag" accept="application/json" style="display: none;">
+            <button class="btn-secondary btn-sm" id="btn-migrate-embeddings" title="旧記憶をGemini Embedding 2に移行">
+              🔄 Embedding移行
+            </button>
+            <button class="btn-secondary btn-sm" id="btn-export-full" title="ペルソナ・記憶・スレッド・省察・カレンダー等を1ファイルに保存（APIキー・参照画像は除く）">
+              💾 全体バックアップ
+            </button>
+            <button class="btn-secondary btn-sm" id="btn-import-full" title="全体バックアップから復元（重複データはスキップ）">
+              📂 全体復元
+            </button>
+            <input type="file" id="input-import-full" accept="application/json" style="display: none;">
+            <button class="btn-primary btn-sm" id="btn-run-reflection-manual">
+               ✨ 今すぐ省察
+            </button>
+          </div>
+        </div>
+        <div class="memory-list" id="reflection-list" style="max-height: 60vh; overflow-y: auto;">
+          <!-- Reflections dynamically inserted -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Reflection Modal -->
+  <div class="modal-overlay" id="edit-reflection-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>省察データを編集</h2>
+        <button class="btn-icon modal-close" data-modal="edit-reflection-modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-reflection-id">
+        <div class="setting-group">
+          <label class="setting-label">内容（RAG記憶の核）</label>
+          <textarea class="setup-input textarea-input" id="edit-reflection-content" rows="12" style="font-size: 0.9rem; line-height: 1.6;"></textarea>
+          <p class="setting-hint">※内容を大幅に変更すると、RAGの検索精度に影響する場合があります。</p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary modal-close" data-modal="edit-reflection-modal">キャンセル</button>
+          <button class="btn-primary" id="btn-update-reflection-save">更新して記憶を定着させる</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- General Confirm Modal -->
+  <div class="modal-overlay" id="confirm-modal" style="z-index: 3000;">
+    <div class="modal" style="max-width: 400px; width: 90%;">
+      <div class="modal-header">
+        <h2 id="confirm-modal-title">確認</h2>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-modal-message" style="margin-bottom: 25px; line-height: 1.6;"></p>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="btn-confirm-cancel">キャンセル</button>
+          <button class="btn-danger" id="btn-confirm-ok">はい、実行します</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Thread context menu (Global) -->
+  <div class="modal-overlay" id="context-menu-overlay"></div>
+  <div class="context-menu" id="thread-context-menu">
+    <button class="context-menu-item" id="ctx-rename">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      名前を変更
+    </button>
+    <button class="context-menu-item" id="ctx-pin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      ピン留め
+    </button>
+    <button class="context-menu-item" id="ctx-archive">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+      アーカイブ
+    </button>
+    <button class="context-menu-item" id="ctx-export">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      エクスポート
+    </button>
+    <div class="context-menu-divider"></div>
+    <button class="context-menu-item danger" id="ctx-delete">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      削除
+    </button>
+  </div>
+
+  <!-- Scripts (order matters) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="js/config.js?v=42"></script>
+  <script src="js/storage.js?v=42"></script>
+  <script src="js/crypto.js?v=42"></script>
+  <script src="js/auth.js?v=42"></script>
+  <script src="js/api.js?v=42"></script>
+  <script src="js/threads.js?v=42"></script>
+  <script src="js/memory.js?v=42"></script>
+  <script src="js/personas.js?v=42"></script>
+  <script src="js/chat.js?v=42"></script>
+  <script src="js/google-auth.js?v=42"></script>
+  <script src="js/google-services.js?v=42"></script>
+  <script src="js/image-gen.js?v=42"></script>
+  <script src="js/rag.js?v=42"></script>
+  <script src="js/reflection.js?v=42"></script>
+  <script src="js/calendar.js?v=42"></script>
+  <script src="js/spotify-auth.js?v=42"></script>
+  <script src="js/spotify.js?v=42"></script>
+  <script src="js/camera.js?v=42"></script>
+  <script src="js/fitness.js?v=42"></script>
+  <script src="js/anniversary.js?v=42"></script>
+  <script src="js/app.js?v=42"></script>
+</body>
+</html>
