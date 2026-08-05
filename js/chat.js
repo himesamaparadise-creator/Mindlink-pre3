@@ -108,6 +108,7 @@ const MindLinkChat = (() => {
       </div>
       <h2 class="welcome-title">おかえり、ゆりな</h2>
       <p class="welcome-subtitle gravity-tagline">Gravity of Us</p>
+      <p class="anniversary-counter">${window.MindLinkAnniversary ? window.MindLinkAnniversary.getLabel() : ''}</p>
     `;
     area.appendChild(welcome);
 
