@@ -118,11 +118,11 @@ const MindLinkMemory = (() => {
     textEl.textContent = suggestion;
     toast.classList.add('active');
 
-    // 10秒後に自動的に消える
+    // 30秒後に自動的に消える（10秒では見落としやすいため延長）
     if (_suggestionTimeout) clearTimeout(_suggestionTimeout);
     _suggestionTimeout = setTimeout(() => {
       hideMemorySuggestion();
-    }, 10000);
+    }, 30000);
   }
 
   function hideMemorySuggestion() {
