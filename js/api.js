@@ -778,8 +778,23 @@ const MindLinkAPI = (() => {
               timeInstruction
             ].filter(Boolean).join('');
 
+            // ── 記憶の提案（AIが「覚えておきたい」と判断したものを申告させる） ──
+            const memorySuggestInstruction = `
+
+【記憶の提案について】
+会話の中で、ゆりなに関する新しい事実や、今後のために覚えておく価値のある出来事を知った場合、
+返答の一番最後の行に、次の形式でひとつだけ書き添えてください。
+
+〔記憶: 覚えておきたい内容を一文で〕
+
+・この行は画面には表示されず、ゆりなが承認した場合にのみ記憶として保存されます。
+・毎回書く必要はありません。本当に覚えておく価値があると感じた時だけにしてください（数回に一度で十分です）。
+・すでに知っていること、その場限りの些細なこと、あなた自身の感想や決意は書かないでください。
+・内容は「ゆりなは〜」「〜した」のように、後から読んで意味が分かる一文にしてください。
+・この行について会話の中で言及したり、記憶に追加したことを話題にしたりしないでください。`;
+
             body.systemInstruction = {
-              parts: [{ text: finalPromptText }]
+              parts: [{ text: finalPromptText + memorySuggestInstruction }]
             };
 
             // safetySettingsは明示的に設定せず、APIのデフォルト動的判断（文脈考慮）に委ねる
@@ -975,7 +990,23 @@ const MindLinkAPI = (() => {
               continue toolLoop;
             }
 
-            return onComplete(fullText, webSearchUsed ? ['__web_search__'] : [], actualModel, finishReason);
+            // ── 記憶提案マーカーの抽出 ──
+            // 返答末尾の 〔記憶: 〜〕 を取り出し、本文からは取り除く
+            const _suggestions = webSearchUsed ? ['__web_search__'] : [];
+            let _cleanText = fullText;
+            try {
+              const _re = /[〔\[]\s*記憶\s*[:：]\s*([^〕\]]+)[〕\]]/g;
+              let _m;
+              while ((_m = _re.exec(fullText)) !== null) {
+                const _content = _m[1].trim();
+                if (_content && _content.length <= 200) _suggestions.push(_content);
+              }
+              _cleanText = fullText.replace(_re, '').replace(/\n{3,}$/, '\n').trimEnd();
+            } catch (sugErr) {
+              console.warn('[MindLink] 記憶提案の抽出に失敗:', sugErr);
+            }
+
+            return onComplete(_cleanText, _suggestions, actualModel, finishReason);
 
           } catch (e) {
             if (e.name === 'AbortError') {
