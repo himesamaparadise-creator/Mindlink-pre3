@@ -240,6 +240,12 @@ const MindLinkChat = (() => {
               </svg>
               編集
             </button>` : ''}
+            ${!isUser ? `<button class="message-action-btn edit-ai-btn" title="この発言を書き換える">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              編集
+            </button>` : ''}
             ${!isUser ? `<button class="message-action-btn save-memory-btn" title="記憶に追加">
               🧠 記憶に追加
             </button>` : ''}
@@ -276,6 +282,11 @@ const MindLinkChat = (() => {
     // ユーザーメッセージ編集
     wrapper.querySelector('.edit-msg-btn')?.addEventListener('click', () => {
       startEditingMessage(msg);
+    });
+
+    // AI発言の書き換え（送信し直さず、履歴の内容だけを差し替える）
+    wrapper.querySelector('.edit-ai-btn')?.addEventListener('click', () => {
+      startEditingAiMessage(msg, wrapper);
     });
 
     // 記憶に追加
@@ -1001,6 +1012,64 @@ const MindLinkChat = (() => {
   }
 
   // メッセージ編集関連
+  // ── AIの発言をその場で書き換える ──
+  // 送信はせず、保存されている本文を差し替えるだけ。以降の会話はこの内容を前提に続く。
+  function startEditingAiMessage(msg, wrapper) {
+    const bubble = wrapper.querySelector('.message-bubble');
+    if (!bubble || bubble.dataset.editing === '1') return;
+    bubble.dataset.editing = '1';
+
+    const original = msg.content;
+    const prevHtml = bubble.innerHTML;
+
+    const ta = document.createElement('textarea');
+    ta.className = 'ai-edit-textarea';
+    ta.value = original;
+
+    const bar = document.createElement('div');
+    bar.className = 'ai-edit-actions';
+    bar.innerHTML = `
+      <button class="btn-secondary btn-sm ai-edit-cancel">取消</button>
+      <button class="btn-primary btn-sm ai-edit-save">保存</button>`;
+
+    bubble.innerHTML = '';
+    bubble.appendChild(ta);
+    bubble.appendChild(bar);
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight + 4, 400) + 'px';
+    ta.focus();
+
+    const restore = () => {
+      bubble.dataset.editing = '0';
+      bubble.innerHTML = prevHtml;
+    };
+
+    bar.querySelector('.ai-edit-cancel').addEventListener('click', restore);
+
+    bar.querySelector('.ai-edit-save').addEventListener('click', () => {
+      const newText = ta.value.trim();
+      if (!newText) { restore(); return; }
+      try {
+        const threadId = MindLinkThreads.getCurrentThreadId();
+        const msgs = MindLinkStorage.getMessages(threadId);
+        const target = msgs.find(m => m.id === msg.id);
+        if (target) {
+          target.content = newText;
+          target.editedByUser = true;
+          MindLinkStorage.setMessages(threadId, msgs);
+        }
+        msg.content = newText;
+        bubble.dataset.editing = '0';
+        loadMessages(threadId);
+        MindLinkApp.showToast('発言を書き換えました');
+      } catch (e) {
+        console.error('[MindLink] AI発言の書き換えに失敗:', e);
+        MindLinkApp.showToast('書き換えに失敗しました');
+        restore();
+      }
+    });
+  }
+
   function startEditingMessage(msg) {
     const input = document.getElementById('message-input');
     if (!input) return;
