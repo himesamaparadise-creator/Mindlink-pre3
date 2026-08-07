@@ -2006,3 +2006,33 @@ body {
   font-family: Georgia, 'Times New Roman', serif;
   letter-spacing: 0.1em;
 }
+
+/* ── AI発言のその場編集 ── */
+.ai-edit-textarea {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+.ai-edit-textarea:focus {
+  border-color: var(--color-accent);
+}
+.ai-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+[data-color-theme="yzak"][data-theme="light"] .ai-edit-textarea {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(179, 160, 116, 0.6);
+}
