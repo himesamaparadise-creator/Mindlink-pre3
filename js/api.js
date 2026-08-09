@@ -355,11 +355,15 @@ const MindLinkAPI = (() => {
     // url_context（URL読み取り）を維持するため、対応モデル（3系）のみに限定。
     // ・2.5系は url_context 非対応のため除外（URLを読めず誤動作する）
     // ・3.1-pro は高コストのため自動フォールバックには含めない
-    // → 安価で安定した gemini-3.1-flash-lite を唯一の落ち先にする
+    // ★変更点：一段目の落ち先を gemini-3.6-flash にした。
+    //   flash-lite は安価だが、道具（カレンダー等）を使った直後に芝居から
+    //   事務口調へ崩れやすい。大事な場面で代打が出た時の被害が大きいため、
+    //   芝居を保てる 3.6-flash を先に試し、それも駄目な時だけ lite へ落とす。
     const fallbackChain = [
       requestedModel,
+      'gemini-3.6-flash',
       'gemini-3.1-flash-lite'
-    ];
+    ].filter((m, i, arr) => m && arr.indexOf(m) === i);
 
     // ツールループ用：現在のメッセージ列・追加済みIDを管理
     let currentMessages = [...messages];
