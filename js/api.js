@@ -6,6 +6,9 @@
 const MindLinkAPI = (() => {
   console.log('[MindLink API] v14 (Time Insight Optimized) Loaded');
   const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+  // 埋め込みベクトルの次元数。既定の3072では1件あたり約58KBになり
+  // localStorage(上限5MB)を圧迫するため768に縮小（容量約1/4・精度低下は僅か）
+  const EMBEDDING_DIM = 768;
 
   function getEffectiveModel(threadId) {
     if (threadId) {
@@ -24,6 +27,8 @@ const MindLinkAPI = (() => {
     const apiKey = await MindLinkAuth.getApiKey('gemini');
     if (!apiKey) throw new Error('APIキー未設定');
 
+    // 保存する指紋の次元数（容量対策で768に縮小）
+    // 次元を変えた場合、古いベクトルは長さが違うため RAG 側で自動的に作り直される
     // Embedding は gemini-embedding-2 のみを使用する。
     // 旧モデル(gemini-embedding-001)へのフォールバックは次元数が異なり、
     // 保存済みベクトルと混在すると類似度計算が壊れるため行わない。
@@ -33,7 +38,12 @@ const MindLinkAPI = (() => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: { parts: [{ text }] }
+        content: { parts: [{ text }] },
+        // 次元数を768に縮小して保存容量を約1/4にする。
+        // 既定(3072次元)では1件あたり約58KBになり、記憶が増えると
+        // localStorage(上限5MB)を圧迫して保存が失敗する危険があるため。
+        // 検索精度の低下はごく僅か。
+        outputDimensionality: EMBEDDING_DIM
       })
     });
 
@@ -65,7 +75,9 @@ const MindLinkAPI = (() => {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 2048,
+          // 省察は4区分を書くうえ、新しいモデルは思考分もこの枠から消費するため
+          // 2048では途中で切れることがある。安価なモデルなので余裕を持たせる。
+          maxOutputTokens: 8192,
         }
       })
     });
