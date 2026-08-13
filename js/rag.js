@@ -48,7 +48,8 @@ const MindLinkRAG = (() => {
 
       // 埋め込みデータを持っているものだけで計算
       const scored = reflections
-        .filter(r => r.embedding && Array.isArray(r.embedding))
+        .filter(r => r.embedding && Array.isArray(r.embedding)
+                  && r.embedding.length === queryEmbedding.length)
         .map(r => ({
           ...r,
           score: cosineSimilarity(queryEmbedding, r.embedding) * temporalDecay(r)
@@ -79,6 +80,10 @@ const MindLinkRAG = (() => {
       let scored = [];
       for (const m of memories) {
         let embedding = m.embedding;
+        // 次元数が変わった古いベクトルは作り直す（容量削減の移行を兼ねる）
+        if (Array.isArray(embedding) && embedding.length !== queryEmbedding.length) {
+          embedding = null;
+        }
         // 埋め込みデータがない場合は、初回検索時にオンザフライで生成して保存
         if (!embedding || !Array.isArray(embedding)) {
           try {
@@ -114,6 +119,7 @@ const MindLinkRAG = (() => {
 
       const threads = reflections.filter(r =>
         r.sectionType === 'research_thread' && r.embedding && Array.isArray(r.embedding)
+        && r.embedding.length === queryEmbedding.length
       );
       if (threads.length === 0) return [];
 
