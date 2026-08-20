@@ -367,13 +367,18 @@ const MindLinkAPI = (() => {
     // url_context（URL読み取り）を維持するため、対応モデル（3系）のみに限定。
     // ・2.5系は url_context 非対応のため除外（URLを読めず誤動作する）
     // ・3.1-pro は高コストのため自動フォールバックには含めない
-    // ★変更点：一段目の落ち先を gemini-3.6-flash にした。
+    // ★変更点1：一段目の落ち先を gemini-3.6-flash にした。
     //   flash-lite は安価だが、道具（カレンダー等）を使った直後に芝居から
     //   事務口調へ崩れやすい。大事な場面で代打が出た時の被害が大きいため、
-    //   芝居を保てる 3.6-flash を先に試し、それも駄目な時だけ lite へ落とす。
+    //   芝居を保てる 3.6-flash を先に試す。
+    // ★変更点2：二段目に gemini-3.5-flash を挟んだ。
+    //   lite は持ち物や立場を取り違えることがある（ゆりなの所持品をイザークが
+    //   着けている等）。3.5 はかつての主力で芝居を保てるため、lite の手前に置く。
+    //   lite は最後の非常口として残す（崩れても返らないよりはマシな場面のため）。
     const fallbackChain = [
       requestedModel,
       'gemini-3.6-flash',
+      'gemini-3.5-flash',
       'gemini-3.1-flash-lite'
     ].filter((m, i, arr) => m && arr.indexOf(m) === i);
 
@@ -444,8 +449,10 @@ const MindLinkAPI = (() => {
           let fullText = '';
           let allParts = [];
           let finishReason = null;
-          // ── アイドルタイムアウト（30秒）用 ──
-          const TIMEOUT_MS = 90000; // url_context（URL読み取り）は初動が遅いため余裕を持たせる
+          // ── アイドルタイムアウト用 ──
+          // 思考モデル（3.x系）は考えている間まったく出力が流れてこない。
+          // 90秒では長考時に見切られ、粘らずそのまま代打へ落ちていたため180秒へ延長。
+          const TIMEOUT_MS = 180000;
           let timedOut = false;
           let idleTimer = null;
           const timeoutController = new AbortController();
