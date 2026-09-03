@@ -101,16 +101,26 @@ const MindLinkReflection = (() => {
     try {
       MindLinkApp.showProgress(targetDateStr ? `${targetDateStr}の自己省察を始めています… 🌙` : '自己省察を始めています… 🌙');
 
-      // 【一段階目】チャンクごとに無難な要約を作る（ブロックされたチャンクはスキップ）
+      // 【一段階目】チャンクごとに無難な要約を作る（失敗したチャンクはスキップ）
+      _lastChunkFailure = null;
       const chunkSummaries = [];
+      let failedCount = 0;
       for (let i = 0; i < chunks.length; i++) {
         MindLinkApp.showProgress(`${dayLabel}の会話を整理しています… (${i + 1}/${chunks.length})`);
         const s = await summarizeChunkSafely(chunks[i]);
         if (s) chunkSummaries.push(s);
+        else failedCount++;
+      }
+      if (failedCount > 0) {
+        console.warn(`[MindLink Reflection] ${chunks.length}個中${failedCount}個のチャンクをスキップ（最後の理由: ${_lastChunkFailure}）`);
       }
       if (chunkSummaries.length === 0) {
-        // 全チャンクが要約できなかった（内容がブロックされた可能性が高い）
-        throw new Error('会話の要約が生成できませんでした（内容がブロックされた可能性）');
+        // 全チャンクが失敗。原因は安全フィルターとは限らない（混雑・タイムアウトでも
+        // 同じ結果になる）ため、実際の失敗理由を推定して表示する。対処が変わるため。
+        const kind = classifyChunkFailure(_lastChunkFailure);
+        throw new Error(
+          `会話の要約が生成できませんでした（${chunks.length}個すべて失敗／推定原因: ${kind}）\n詳細: ${_lastChunkFailure || '記録なし'}`
+        );
       }
       const digest = chunkSummaries.join('\n\n');
 
@@ -441,6 +451,9 @@ ${likedList.slice(0, 10000)}`;
   // 1チャンクを「無難な要約」に変換する。露骨な内容でブロックされた場合は null を返し、
   // 呼び出し側でそのチャンクをスキップできるようにする（省察全体を止めない）。
   // ※抽象化するのは露骨な描写だけ。普通の話題は具体性を保持する（RAGの検索精度と地続き感の源泉のため）。
+  // 失敗理由を呼び出し側へ伝えるため、直近の失敗内容をここに記録する。
+  let _lastChunkFailure = null;
+
   async function summarizeChunkSafely(chunkText) {
     const prompt = `以下はフィクション作品のキャラクター対話の一部です。
 後から読み返したときに具体的に思い出せる「記録」として要約してください。
@@ -456,11 +469,29 @@ ${likedList.slice(0, 10000)}`;
 ${chunkText}`;
     try {
       const summary = await window.MindLinkAPI.getSummary(prompt, false);
-      return summary || null;
+      if (!summary) {
+        _lastChunkFailure = '空の応答が返りました';
+        return null;
+      }
+      return summary;
     } catch (e) {
-      console.warn('[MindLink] チャンク要約をスキップ:', e.message);
+      _lastChunkFailure = (e && e.message) ? e.message : String(e);
+      console.warn('[MindLink] チャンク要約をスキップ:', _lastChunkFailure);
       return null;
     }
+  }
+
+  // 失敗理由の文面から原因の種別を推定し、日本語のラベルにする。
+  function classifyChunkFailure(reason) {
+    if (!reason) return '原因不明';
+    const r = String(reason);
+    if (/SAFETY|PROHIBITED|blockReason|ブロック/i.test(r))            return '安全フィルター';
+    if (/タイムアウト|timeout|abort/i.test(r))                        return 'タイムアウト';
+    if (/429|503|High Demand|overload|UNAVAILABLE|RESOURCE/i.test(r)) return '混雑・速度制限';
+    if (/MAX_TOKENS/i.test(r))                                        return '出力枠の使い切り';
+    if (/quota|billing|PERMISSION|API key|401|403/i.test(r))          return '認証・請求';
+    if (/Failed to fetch|NetworkError|ネットワーク/i.test(r))         return '通信エラー';
+    return 'その他';
   }
 
   // ── 追い省察（前日の取りこぼし検出と実行） ──
