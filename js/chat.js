@@ -219,7 +219,7 @@ const MindLinkChat = (() => {
               ${contentHtml}${attachmentsHtml}
               ${(!isUser && msg.isSafety) ? `<span style="display:inline-block;margin-top:4px;font-size:13px;opacity:0.7;" title="セーフティフィルターにより一部の回答が省略されました">⚠️</span>` : ''}
               ${(!isUser && msg.actualModel && msg.requestedModel && msg.actualModel !== msg.requestedModel) ? `
-                <div class="fallback-badge" title="高速な代替モデル（${msg.actualModel}）で返答しました">⚡ (代打)</div>
+                <div class="fallback-badge" title="${msg.requestedModel} が使えず ${msg.actualModel} で返答しました${msg.fallbackReason ? '／理由: ' + msg.fallbackReason : ''}">⚡ 代打: ${String(msg.actualModel).replace('gemini-', '')}${msg.fallbackKind ? `（${msg.fallbackKind}）` : ''}</div>
               ` : ''}
               ${(!isUser && msg.webSearchUsed) ? `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:11px;padding:2px 8px;background:rgba(59,130,246,0.12);color:#60a5fa;border-radius:12px;border:1px solid rgba(59,130,246,0.25);" title="Web検索を使って回答しました">🔍 Web検索</div>` : ''}
             </div>
@@ -634,6 +634,10 @@ const MindLinkChat = (() => {
           content: contentToSave || '(...)',
           timestamp: Date.now(),
           actualModel: actualModel,
+          fallbackReason: (window.MindLinkAPI.getLastFallbackReason && window.MindLinkAPI.getLastFallbackReason()) || null,
+          fallbackKind: (window.MindLinkAPI.getLastFallbackReason && window.MindLinkAPI.getLastFallbackReason())
+            ? window.MindLinkAPI.classifyFallbackReason(window.MindLinkAPI.getLastFallbackReason())
+            : null,
           requestedModel: requestedModel,
           isSafety: isSafety,
           webSearchUsed: suggestions.includes('__web_search__'),
