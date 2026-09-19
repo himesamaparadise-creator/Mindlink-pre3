@@ -4,6 +4,9 @@
  */
 
 const MindLinkAPI = (() => {
+  // 直近の代打発動理由（粘らず次モデルへ落ちた時に入る）
+  let _lastFallbackReason = null;
+
   console.log('[MindLink API] v14 (Time Insight Optimized) Loaded');
   const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
   // 埋め込みベクトルの次元数。既定の3072では1件あたり約58KBになり
@@ -381,6 +384,9 @@ const MindLinkAPI = (() => {
       'gemini-3.5-flash',
       'gemini-3.1-flash-lite'
     ].filter((m, i, arr) => m && arr.indexOf(m) === i);
+
+    // 代打の理由を記録し直す（この送信ぶんの記録にするため毎回リセット）
+    _lastFallbackReason = null;
 
     // ツールループ用：現在のメッセージ列・追加済みIDを管理
     let currentMessages = [...messages];
@@ -1076,6 +1082,8 @@ const MindLinkAPI = (() => {
               lastError.includes('network') ||
               lastError.includes('fetch');
             if (!isRetriable) {
+              // 粘らずに次のモデルへ落ちる。理由を残して画面の⚡札に出せるようにする。
+              _lastFallbackReason = lastError;
               break;
             }
           } finally {
@@ -1119,7 +1127,26 @@ const MindLinkAPI = (() => {
     }
   }
 
-  return { streamChat, getEmbedding, getSummary, generateDailySummary, summarizeAttachment, testConnection, formatMessages };
+  // 直近に代打が発動した理由（粘らず次モデルへ落ちた時のみ入る）
+  function getLastFallbackReason() {
+    return _lastFallbackReason;
+  }
+
+  // 理由の文面から原因の種別を推定し、短いラベルにする。
+  function classifyFallbackReason(reason) {
+    if (!reason) return '混雑';
+    const r = String(reason);
+    if (/タイムアウト|timeout|abort/i.test(r))                          return 'タイムアウト';
+    if (/\b400\b|INVALID_ARGUMENT|not supported|Unsupported/i.test(r)) return '要求が拒否(400)';
+    if (/SAFETY|PROHIBITED|blockReason/i.test(r))                       return '安全フィルター';
+    if (/\b404\b|NOT_FOUND/i.test(r))                                  return 'モデル未提供(404)';
+    if (/quota|billing|PERMISSION|API key|\b401\b|\b403\b/i.test(r))  return '認証・請求';
+    if (/429|503|High Demand|overload|UNAVAILABLE/i.test(r))            return '混雑・速度制限';
+    if (/network|fetch/i.test(r))                                       return '通信エラー';
+    return 'その他';
+  }
+
+  return { streamChat, getEmbedding, getSummary, generateDailySummary, summarizeAttachment, testConnection, formatMessages, getLastFallbackReason, classifyFallbackReason };
 })();
 
 window.MindLinkAPI = MindLinkAPI;
