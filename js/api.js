@@ -572,7 +572,14 @@ const MindLinkAPI = (() => {
             };
 
             if (tools.length > 0) {
-              body.tools = tools;
+              // ★ツールは1つのオブジェクトに統合して送る。
+              //   googleSearch / url_context / function_declarations を別々の要素で並べると、
+              //   新しいモデル（3.6以降）が 400 INVALID_ARGUMENT
+              //   「Multiple tools are supported only when they are all search tools.」を返す。
+              //   公式SDKの実装でも、関数宣言と組み込みツールは同一のToolに載せる必要がある。
+              const mergedTool = {};
+              for (const t of tools) Object.assign(mergedTool, t);
+              body.tools = [mergedTool];
               const toolConfig = {};
               // include_server_side_tool_invocations は tool call context circulation を要するが
               // gemini-2.5系は非対応（"Tool call context circulation is not enabled" エラー）のため
