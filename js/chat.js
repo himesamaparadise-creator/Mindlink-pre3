@@ -220,6 +220,7 @@ const MindLinkChat = (() => {
               ${(!isUser && msg.isSafety) ? `<span style="display:inline-block;margin-top:4px;font-size:13px;opacity:0.7;" title="セーフティフィルターにより一部の回答が省略されました">⚠️</span>` : ''}
               ${(!isUser && msg.actualModel && msg.requestedModel && msg.actualModel !== msg.requestedModel) ? `
                 <div class="fallback-badge" title="${msg.requestedModel} が使えず ${msg.actualModel} で返答しました${msg.fallbackReason ? '／理由: ' + msg.fallbackReason : ''}">⚡ 代打: ${String(msg.actualModel).replace('gemini-', '')}${msg.fallbackKind ? `（${msg.fallbackKind}）` : ''}</div>
+                ${msg.fallbackReason ? `<div class="fallback-reason" style="font-size:10.5px;line-height:1.5;color:#8a7f95;margin-top:4px;word-break:break-all;white-space:pre-wrap;">${escapeHtml(String(msg.fallbackReason).slice(0, 300))}</div>` : ''}
               ` : ''}
               ${(!isUser && msg.webSearchUsed) ? `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:11px;padding:2px 8px;background:rgba(59,130,246,0.12);color:#60a5fa;border-radius:12px;border:1px solid rgba(59,130,246,0.25);" title="Web検索を使って回答しました">🔍 Web検索</div>` : ''}
             </div>
@@ -252,6 +253,13 @@ const MindLinkChat = (() => {
             ${!isUser ? `<button class="message-action-btn like-btn" title="いいね" data-like-count="0">
               ❤️ <span class="like-count"></span>
             </button>` : ''}
+            <button class="message-action-btn delete-msg-btn" title="この発言を削除" style="color:#b06a6a;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                <path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+              </svg>
+              削除
+            </button>
           </div>` : ''}
         </div>
       </div>
@@ -292,6 +300,11 @@ const MindLinkChat = (() => {
     // 記憶に追加
     wrapper.querySelector('.save-memory-btn')?.addEventListener('click', () => {
       openAddMemoryWithContent(msg.content.slice(0, 500));
+    });
+
+    // 発言の削除（ユーザー・AIどちらも）。履歴から取り除くだけで再送信はしない。
+    wrapper.querySelector('.delete-msg-btn')?.addEventListener('click', () => {
+      deleteMessageById(msg);
     });
 
     // いいね
@@ -759,6 +772,40 @@ const MindLinkChat = (() => {
         appendMessage(errorMsg, persona);
       },
     });
+  }
+
+  // ── 発言の削除 ──
+  // 崩れた出力やループを履歴に残さないための手段。編集と違い本文ごと取り除く。
+  // ユーザー・AIどちらの発言にも使える。確認モーダルを必ず挟む。
+  function deleteMessageById(msg) {
+    const isUser = msg.role === 'user';
+    const who = isUser ? 'あなたの発言' : 'この発言';
+    const body = msg.content || '';
+    const preview = body.replace(/\s+/g, ' ').slice(0, 40);
+
+    MindLinkApp.showConfirm(
+      '発言を削除',
+      `${who}を履歴から削除しますか？\n\n「${preview}${body.length > 40 ? '…' : ''}」\n\nこの操作は取り消せません。`,
+      () => {
+        try {
+          const threadId = MindLinkThreads.getCurrentThreadId();
+          const msgs = MindLinkStorage.getMessages(threadId);
+          const next = msgs.filter(m => m.id !== msg.id);
+
+          if (next.length === msgs.length) {
+            MindLinkApp.showToast('対象の発言が見つかりませんでした');
+            return;
+          }
+
+          MindLinkStorage.setMessages(threadId, next);
+          loadMessages(threadId);
+          MindLinkApp.showToast('発言を削除しました');
+        } catch (e) {
+          console.error('[MindLink] 発言の削除に失敗:', e);
+          MindLinkApp.showToast('削除に失敗しました');
+        }
+      }
+    );
   }
 
   // クリップボードコピー
