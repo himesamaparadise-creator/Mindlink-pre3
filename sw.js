@@ -3,7 +3,7 @@
  * PWAのオフラインキャッシュ（Vercel最適化版）
  */
 
-const CACHE_NAME = 'mindlink-v93';
+const CACHE_NAME = 'mindlink-v94';
 const ASSETS = [
   '/',
   '/index.html',
