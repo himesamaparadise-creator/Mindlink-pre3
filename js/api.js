@@ -297,10 +297,12 @@ const MindLinkAPI = (() => {
       }
 
       // ロールの決定
-      let role = (msg.role === 'assistant') ? 'model' : 'user';
-      if (msg.role === 'function' || msg.role === 'tool' || parts.some(p => p.functionResponse)) {
-        role = 'function';
-      }
+      // ★関数応答（functionResponse）は role: 'user' で送る。
+      //   旧来の role: 'function' は新しいモデル（3.6以降）が
+      //   400「Role 'function' is not supported」で拒否するため。
+      //   公式の作法でも関数応答は user ターンに載せる。
+      //   ※保存データ上の role: 'function' はそのままでよい（送信時にここで変換する）。
+      const role = (msg.role === 'assistant') ? 'model' : 'user';
 
       return { role, parts };
     });
