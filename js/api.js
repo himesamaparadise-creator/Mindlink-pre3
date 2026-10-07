@@ -223,6 +223,38 @@ const MindLinkAPI = (() => {
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
   // ロール統合用ヘルパー
+  // 関数の呼び出し（model）と応答（user）が必ず隣り合うよう、相方のいない片割れを外す
+  function sanitizeFunctionPairs(turns) {
+    const hasCall = t => t && t.role === 'model' && t.parts.some(p => p.functionCall);
+    const hasResp = t => t && t.role === 'user'  && t.parts.some(p => p.functionResponse);
+    // 中身のある部品だけを残す（思考の署名だけが残った空の部品などを除く）
+    const meaningful = p => (typeof p.text === 'string' && p.text.trim() !== '')
+      || p.inlineData || p.fileData || p.functionCall || p.functionResponse;
+
+    const out = turns.map(t => ({ role: t.role, parts: [...t.parts] }));
+    let removed = 0;
+
+    for (let i = 0; i < out.length; i++) {
+      const t = out[i];
+      if (hasResp(t) && !hasCall(out[i - 1])) {
+        const before = t.parts.length;
+        t.parts = t.parts.filter(p => !p.functionResponse);
+        removed += before - t.parts.length;
+      }
+      if (hasCall(t) && !hasResp(out[i + 1])) {
+        const before = t.parts.length;
+        t.parts = t.parts.filter(p => !p.functionCall);
+        removed += before - t.parts.length;
+      }
+      t.parts = t.parts.filter(meaningful);
+    }
+
+    if (removed > 0) {
+      console.warn(`[MindLink API] 相方のいない関数の呼び出し／応答を ${removed} 件取り除きました`);
+    }
+    return mergeRoles(out.filter(t => t.parts.length > 0));
+  }
+
   function mergeRoles(turns) {
     const merged = [];
     for (const turn of turns) {
@@ -313,9 +345,20 @@ const MindLinkAPI = (() => {
     // 3. ロールの統合
     let merged = mergeRoles(turns);
 
+    // 3.5 関数呼び出しと関数応答の対応を整える
+    //     履歴は直近20件で切り出すため、切れ目が「呼び出し」と「応答」の間に来ると
+    //     相方のいない応答（または呼び出し）が残り、400
+    //     「function response turn comes immediately after a function call turn」になる。
+    //     相方のいないものだけを取り除く。本文のやりとりには手を付けない。
     // 4. API制約：user ロールで開始
-    while (merged.length > 0 && merged[0].role !== 'user') {
-      merged.shift();
+    //    先頭を削ると、すぐ後ろの応答が相方を失うことがあるため、落ち着くまで繰り返す。
+    for (let guard = 0; guard < 10; guard++) {
+      merged = sanitizeFunctionPairs(merged);
+      while (merged.length > 0 && merged[0].role !== 'user') {
+        merged.shift();
+      }
+      const head = merged[0];
+      if (!head || !head.parts.some(p => p.functionResponse)) break;
     }
 
     // 5. 最終フォールバック：merged が空でも必ず user ターンを1つ返す
