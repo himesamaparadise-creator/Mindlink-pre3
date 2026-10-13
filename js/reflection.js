@@ -965,3 +965,187 @@ ${chunkText}`;
 })();
 
 window.MindLinkReflection = MindLinkReflection;
+
+/* MindLink: 手動省察モード（既存 reflection.js の末尾に追加） */
+(() => {
+  'use strict';
+  const reflection = window.MindLinkReflection;
+  if (!reflection || reflection.__manualWindowInstalled) return;
+  reflection.__manualWindowInstalled = true;
+
+  const CHECKPOINT_KEY = 'reflectionManualCheckpoint';
+  const originalPerform = reflection.performReflection.bind(reflection);
+  const originalRender = reflection.renderReflectionList.bind(reflection);
+  let running = false;
+
+  // B方式: 新方式の初回読み込み時を開始点とする。既存の省察は消さない。
+  function getCheckpoint() {
+    const value = Number(MindLinkStorage.getSettings()[CHECKPOINT_KEY]);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+  function initializeCheckpoint() {
+    if (!getCheckpoint()) {
+      MindLinkStorage.updateSettings({ [CHECKPOINT_KEY]: Date.now() });
+    }
+  }
+  initializeCheckpoint();
+
+  // 旧「昨日の省察」自動実行を停止する。
+  reflection.runCatchupReflectionIfNeeded = async () => {};
+  reflection.checkCatchupNeeded = async () => null;
+
+  // 内部関数が生成する未省察の催促バナーも画面から除く。
+  reflection.renderReflectionList = async (...args) => {
+    const result = await originalRender(...args);
+    const list = document.getElementById('reflection-list');
+    if (list) {
+      for (const element of [...list.children]) {
+        const label = element.querySelector(':scope > span');
+        if (label && label.textContent.includes('の省察が未完了です')) {
+          element.remove();
+        }
+      }
+    }
+    return result;
+  };
+
+  // 全チャット（アーカイブ済みを含む）から前回の区切り以降を集める。
+  async function collectMessages(from, to) {
+    const events = [];
+    let order = 0;
+    for (const thread of MindLinkStorage.getThreads()) {
+      const messages = thread.isArchived
+        ? await MindLinkStorage.getArchivedMessages(thread.id)
+        : MindLinkStorage.getMessages(thread.id);
+      for (const message of (messages || [])) {
+        if (message.isSystem || !message.content || typeof message.content !== 'string') continue;
+        const raw = message.timestamp;
+        const numeric = Number(raw);
+        const timestamp = raw == null ? NaN
+          : Number.isFinite(numeric) && numeric > 0 ? numeric : new Date(raw).getTime();
+        if (!Number.isFinite(timestamp) || timestamp <= from || timestamp > to) continue;
+        events.push({
+          timestamp, order: order++,
+          title: thread.title || 'チャット',
+          role: message.role === 'user' ? 'user' : 'model',
+          content: message.content
+        });
+      }
+    }
+    events.sort((a, b) => a.timestamp - b.timestamp || a.order - b.order);
+    const snapshot = [];
+    for (const event of events) {
+      const date = new Date(event.timestamp).toLocaleString('ja-JP');
+      // 長文メッセージは分割する（既存の要約処理の4000文字制限に対応）。
+      for (let offset = 0; offset < event.content.length; offset += 2700) {
+        const part = event.content.slice(offset, offset + 2700);
+        snapshot.push({
+          id: 'manual-' + snapshot.length,
+          role: event.role,
+          content: `[${date} / ${event.title}] ${part}`,
+          timestamp: to,
+          isSystem: false
+        });
+      }
+    }
+    return snapshot;
+  }
+
+  reflection.performReflection = async (manual = false, targetDate = null) => {
+    // 自動省察・特定日への追い省察は行わない。
+    if (!manual || targetDate || running) return;
+    running = true;
+    const savedIds = [];
+    let failed = false;
+    let snapshot;
+    const oldThreads = MindLinkStorage.getThreads;
+    const oldMessages = MindLinkStorage.getMessages;
+    const oldSummary = window.MindLinkAPI?.getSummary;
+    const oldSave = MindLinkStorage.saveReflection;
+    const oldToast = MindLinkApp.showToast;
+    const from = getCheckpoint();
+    const to = Date.now();
+    try {
+      if (!from) throw new Error('省察の開始地点が見つかりません。');
+      snapshot = await collectMessages(from, to);
+      if (!snapshot.length) {
+        MindLinkApp.showToast('まだ省察する会話がありません');
+        return;
+      }
+
+      const summaries = [];
+      let runPromise;
+      try {
+        // 元の省察処理に「今回の全チャット」を一時的な読み取り専用スレッドとして渡す。
+        // 本物のメッセージとスレッドは一切書き換えない。
+        MindLinkStorage.getThreads = () => [{ id: '__manual_snapshot__', title: '全チャット' }];
+        MindLinkStorage.getMessages = id => id === '__manual_snapshot__' ? snapshot : oldMessages(id);
+
+        window.MindLinkAPI.getSummary = async (prompt, ...options) => {
+          if (typeof prompt === 'string' && prompt.startsWith('以下はフィクション作品のキャラクター対話の一部です。')) {
+            const result = await oldSummary(prompt, ...options);
+            if (result) summaries.push(result);
+            return result;
+          }
+          if (typeof prompt === 'string' && prompt.includes('「自己省察（Self-Reflection）」')) {
+            if (summaries.join('\n\n').length > 39000) {
+              throw new Error('対象の会話が多すぎるため、省略せず省察できません。記録はそのまま残っています。');
+            }
+            prompt = prompt
+              .replace('今日一日のユーザーとの対話', '今回の省察期間のユーザーとの対話')
+              .replaceAll('今日の会話', '今回の会話')
+              .replaceAll('明日から', '次回から')
+              .replaceAll('明日あなた自身', '次回あなた自身');
+          }
+          return oldSummary(prompt, ...options);
+        };
+        MindLinkStorage.saveReflection = async record => {
+          const saved = await oldSave(record);
+          if (record.type === 'daily_reflection') savedIds.push(record.id);
+          return saved;
+        };
+        MindLinkApp.showToast = (message, ...args) => {
+          if (String(message).startsWith('省察に失敗しました')) failed = true;
+          return oldToast(message, ...args);
+        };
+
+        // 元の関数は、最初のawaitまで同期実行する。その間に会話を収集させる。
+        runPromise = originalPerform(true);
+      } finally {
+        // 非同期の省察中に、普段のチャット取得が影響を受けないよう即座に戻す。
+        MindLinkStorage.getThreads = oldThreads;
+        MindLinkStorage.getMessages = oldMessages;
+      }
+
+      try {
+        await runPromise;
+      } finally {
+        window.MindLinkAPI.getSummary = oldSummary;
+        MindLinkStorage.saveReflection = oldSave;
+        MindLinkApp.showToast = oldToast;
+      }
+      if (failed || savedIds.length === 0) {
+        throw new Error('省察を完了できませんでした。未省察の会話は保持しています。');
+      }
+
+      // 省察が成功した場合だけ次の開始地点を保存（全体バックアップにも含まれる）。
+      await reflection.renderReflectionList();
+      MindLinkStorage.updateSettings({ [CHECKPOINT_KEY]: to });
+    } catch (error) {
+      // 途中まで記録した省察は取り消して、次回やり直せる状態にする。
+      for (const id of savedIds) {
+        try { await MindLinkStorage.deleteReflection(id); }
+        catch (cleanupError) { console.warn('[MindLink] 省察の後片付けに失敗:', id, cleanupError); }
+      }
+      console.error('[MindLink] 手動省察に失敗:', error);
+      MindLinkApp.showToast('省察に失敗しました: ' + error.message);
+    } finally {
+      MindLinkStorage.getThreads = oldThreads;
+      MindLinkStorage.getMessages = oldMessages;
+      if (window.MindLinkAPI && oldSummary) window.MindLinkAPI.getSummary = oldSummary;
+      MindLinkStorage.saveReflection = oldSave;
+      MindLinkApp.showToast = oldToast;
+      running = false;
+    }
+  };
+})();
