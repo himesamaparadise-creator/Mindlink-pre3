@@ -53,18 +53,7 @@ const MindLinkApp = (() => {
     if (window.MindLinkCamera) MindLinkCamera.init();
     MindLinkReflection.initListeners();
 
-    // ── 追い省察: 前日の未省察分があれば自動実行 ──
-    // 起動直後の負荷を避けて少し遅らせる。ロック中はスキップ（APIキーが使えないため。
-    // その場合も記憶ノートのバナーから手動実行できる）。
-    setTimeout(() => {
-      try {
-        if (!MindLinkAuth.isLocked() && window.MindLinkReflection?.runCatchupReflectionIfNeeded) {
-          MindLinkReflection.runCatchupReflectionIfNeeded();
-        }
-      } catch (e) {
-        console.warn('[MindLink] 追い省察チェックに失敗:', e);
-      }
-    }, 8000);
+    // 省察は手動ボタンからのみ実行する。
 
     // ── OAuth コールバック振り分け ──
     // Spotify は state が 'spotify_' で始まる。Google と干渉しないよう先に処理する。
