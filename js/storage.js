@@ -463,8 +463,9 @@ const MindLinkStorage = (() => {
       if (contentChanged) delete next.embedding; // 編集済みの文章に古いベクトルを使わない
       memories[idx] = next;
       const saved = setMemories(memories);
-      if (saved && contentChanged) deleteMemoryEmbedding(id).catch(e =>
-        console.warn('[MindLink] outdated memory vector cleanup failed:', e));
+      // 保存済みベクトルには元の文章が紐付いている。本文が変わったものは
+      // 検索時に無効として扱い、次の検索で新ベクトルへ置き換える。
+      // ここで非同期削除すると再生成との競合が起きるため削除しない。
       return saved;
     }
     return false;
@@ -473,6 +474,16 @@ const MindLinkStorage = (() => {
   function sameEmbedding(a, b) {
     return Array.isArray(a) && Array.isArray(b)
       && a.length === b.length && a.every((v, i) => v === b[i]);
+  }
+
+  async function getMemoryEmbedding(id) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(MEMORY_EMBEDDINGS_STORE, 'readonly');
+      const req = tx.objectStore(MEMORY_EMBEDDINGS_STORE).get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
   }
 
   async function getMemoryEmbeddings() {
@@ -522,7 +533,7 @@ const MindLinkStorage = (() => {
     if (!id || typeof content !== 'string' || !Array.isArray(embedding))
       throw new Error('Invalid memory embedding');
     await putMemoryEmbeddings([{ id, content, embedding }]);
-    const stored = (await getMemoryEmbeddings()).get(id);
+    const stored = await getMemoryEmbedding(id);
     if (!stored || stored.content !== content || !sameEmbedding(stored.embedding, embedding))
       throw new Error('Memory embedding verification failed');
 
