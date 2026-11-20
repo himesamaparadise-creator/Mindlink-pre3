@@ -258,6 +258,17 @@ const MindLinkApp = (() => {
     resetAutonomousTimer();
     // localStorageに残るアーカイブ済みスレッドをIndexedDB倉庫へ移行（確認ポップアップ付き）
     setTimeout(() => migrateArchivedThreadsToIDB(), 800);
+    // 記憶ベクトルだけを別保存へ移す。検証失敗時は元の記憶を保持する。
+    setTimeout(() => {
+      MindLinkStorage.migrateMemoryEmbeddingsToIDB()
+        .then(result => {
+          if (result.migrated > 0) {
+            console.log('[MindLink] Memory vectors migrated:', result.migrated);
+            Diagnostics.runStartupCheck(); // 容量警告が解消された場合はバナーを更新
+          }
+        })
+        .catch(e => console.error('[MindLink] Memory migration failed (originals retained):', e));
+    }, 1200);
   }
 
   // アーカイブ済みスレッドの会話本文を localStorage → IndexedDB倉庫 へ移行する。
@@ -1442,11 +1453,17 @@ const MindLinkApp = (() => {
     document.getElementById('input-import-archive')?.addEventListener('change', handleImportArchiveFile);
 
     // リセット
-    document.getElementById('btn-reset-app')?.addEventListener('click', () => {
+    document.getElementById('btn-reset-app')?.addEventListener('click', async () => {
       const confirmText = prompt('全データを削除します。確認のため「リセット」と入力してください：');
       if (confirmText === 'リセット') {
-        MindLinkStorage.clear();
-        location.reload();
+        try {
+          await MindLinkStorage.clearMemoryEmbeddings();
+          MindLinkStorage.clear();
+          location.reload();
+        } catch (e) {
+          console.error('[MindLink] reset vector cleanup failed:', e);
+          showToast('データの初期化に失敗しました。もう一度お試しください');
+        }
       }
     });
 
@@ -1908,6 +1925,7 @@ const MindLinkApp = (() => {
           console.warn('[MindLink Diagnostics] 整合性の問題を検知:', d.issues, d);
           showBanner(d.issues.length);
         } else {
+          document.getElementById('diag-banner')?.remove();
           console.log('[MindLink Diagnostics] 整合性チェック OK', {
             storageKB: d.storage.totalKB, threads: d.threads.registeredCount,
           });
