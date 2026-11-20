@@ -87,6 +87,8 @@ const MindLinkApp = (() => {
     setupAutonomousTimer();
     setupVisibilityHandler();
 
+    // 初回設定でペルソナが未登録だった場合の旧形式のIDだけを安全に修復。
+    MindLinkStorage.repairLegacyActivePersonaId();
     // 起動時データ整合性チェック（検知・ログ・診断バナーのみ／削除はしない）
     Diagnostics.runStartupCheck();
   }
