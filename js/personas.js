@@ -82,6 +82,7 @@ const MindLinkPersonas = (() => {
 
   // ペルソナ選択
   function selectPersona(id) {
+    if (typeof id !== 'string' || !id.trim()) return;
     MindLinkStorage.setActivePersonaId(id);
     const persona = MindLinkStorage.getPersona(id);
     const nameEl = document.getElementById('current-persona-name');
