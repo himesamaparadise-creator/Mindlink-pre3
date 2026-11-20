@@ -658,7 +658,17 @@ const MindLinkStorage = (() => {
     return id;
   }
   function setActivePersonaId(id) {
+    // ペルソナが未登録の場合に undefined を localStorage へ書き込まない。
+    if (typeof id !== 'string' || !id.trim()) return false;
     return set('active_persona_id', id);
+  }
+  function repairLegacyActivePersonaId() {
+    // 旧コードで未選択ペルソナが文字列 "undefined" として保存された場合だけ修復。
+    // メモリやペルソナのデータ自体には触れない。
+    if (localStorage.getItem(key('active_persona_id')) === 'undefined') {
+      return set('active_persona_id', 'default');
+    }
+    return false;
   }
   // ── Global Context ──
   function getGlobalContext() {
@@ -1303,7 +1313,7 @@ const MindLinkStorage = (() => {
     clearMemoryEmbeddings, getMemoriesForBackup,
     addLikedMessage, getLikedMessages, clearLikedMessages,
     getPersonas, setPersonas, savePersona, deletePersona, getPersona, getDefaultPersona,
-    getActivePersonaId, setActivePersonaId,
+    getActivePersonaId, setActivePersonaId, repairLegacyActivePersonaId,
     getGlobalContext, setGlobalContext,
     getDiaryEntries, saveDiaryEntry, deleteDiaryEntry, addDiaryComment, updateDiaryComment, deleteDiaryComment,
     getReflections, saveReflection, deleteReflection, updateReflection,
