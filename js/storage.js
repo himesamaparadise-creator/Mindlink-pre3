@@ -10,7 +10,7 @@ const MindLinkStorage = (() => {
   
   // ── IndexedDB Helper (Stability for large RAG data) ──
   const DB_NAME = 'MindLinkDB';
-  const DB_VERSION = 7;
+  const DB_VERSION = 8;
   const STORE_NAME = 'reflections';
   const TOKEN_STORE = 'secure_tokens';
   const DAILY_SUMMARY_STORE = 'daily_summary';
@@ -21,6 +21,8 @@ const MindLinkStorage = (() => {
   // アーカイブ済みスレッドの会話本文を保管する倉庫（localStorage容量対策）
   // keyPath は threadId（= スレッドID）。値は { id, messages: [...] }。
   const ARCHIVED_MESSAGES_STORE = 'archivedMessages';
+  // 個別記憶の文章はlocalStorageに残し、大きな検索ベクトルだけ別保存する。
+  const MEMORY_EMBEDDINGS_STORE = 'memoryEmbeddings';
   // 画像生成機能：参照画像ライブラリ（最大5枚）と生成画像本体（7日で自動整理）
   // 画像本体は容量が大きいためlocalStorageではなくIndexedDBに保管し、
   // メッセージ側には参照ID（imageId）のみを持たせる。
@@ -57,6 +59,9 @@ const MindLinkStorage = (() => {
         }
         if (!db.objectStoreNames.contains(ARCHIVED_MESSAGES_STORE)) {
           db.createObjectStore(ARCHIVED_MESSAGES_STORE, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(MEMORY_EMBEDDINGS_STORE)) {
+          db.createObjectStore(MEMORY_EMBEDDINGS_STORE, { keyPath: 'id' });
         }
         if (!db.objectStoreNames.contains(REFERENCE_IMAGES_STORE)) {
           db.createObjectStore(REFERENCE_IMAGES_STORE, { keyPath: 'id' });
@@ -429,6 +434,7 @@ const MindLinkStorage = (() => {
   }
 
   // ── Memories ──
+  // 文面とメタデータは従来どおり同期的に扱う。EmbeddingだけIndexedDBに保存する。
   function getMemories() {
     return get('memories', []);
   }
@@ -441,15 +447,218 @@ const MindLinkStorage = (() => {
     return setMemories(memories);
   }
   function deleteMemory(id) {
-    return setMemories(getMemories().filter(m => m.id !== id));
+    const saved = setMemories(getMemories().filter(m => m.id !== id));
+    if (saved) deleteMemoryEmbedding(id).catch(e =>
+      console.warn('[MindLink] memory vector cleanup failed:', e));
+    return saved;
   }
   function updateMemory(id, partial) {
     const memories = getMemories();
     const idx = memories.findIndex(m => m.id === id);
     if (idx >= 0) {
-      memories[idx] = { ...memories[idx], ...partial };
-      setMemories(memories);
+      const old = memories[idx];
+      const contentChanged = Object.prototype.hasOwnProperty.call(partial, 'content')
+        && partial.content !== old.content;
+      const next = { ...old, ...partial };
+      if (contentChanged) delete next.embedding; // 編集済みの文章に古いベクトルを使わない
+      memories[idx] = next;
+      const saved = setMemories(memories);
+      // 保存済みベクトルには元の文章が紐付いている。本文が変わったものは
+      // 検索時に無効として扱い、次の検索で新ベクトルへ置き換える。
+      // ここで非同期削除すると再生成との競合が起きるため削除しない。
+      return saved;
     }
+    return false;
+  }
+
+  function sameEmbedding(a, b) {
+    return Array.isArray(a) && Array.isArray(b)
+      && a.length === b.length && a.every((v, i) => v === b[i]);
+  }
+
+  async function getMemoryEmbedding(id) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(MEMORY_EMBEDDINGS_STORE, 'readonly');
+      const req = tx.objectStore(MEMORY_EMBEDDINGS_STORE).get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function getMemoryEmbeddings() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(MEMORY_EMBEDDINGS_STORE, 'readonly');
+      const req = tx.objectStore(MEMORY_EMBEDDINGS_STORE).getAll();
+      req.onsuccess = () => resolve(new Map(req.result.map(r => [r.id, r])));
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function putMemoryEmbeddings(records) {
+    if (records.length === 0) return;
+    const db = await openDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(MEMORY_EMBEDDINGS_STORE, 'readwrite');
+      tx.oncomplete = () => resolve(true); // request成功だけでなくcommit完了を待つ
+      tx.onabort = () => reject(tx.error || new Error('memory embedding transaction aborted'));
+      tx.onerror = () => {}; // abortに集約する
+      const store = tx.objectStore(MEMORY_EMBEDDINGS_STORE);
+      for (const record of records) store.put(record);
+    });
+  }
+
+  async function deleteMemoryEmbedding(id) {
+    const db = await openDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(MEMORY_EMBEDDINGS_STORE, 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onabort = () => reject(tx.error || new Error('memory embedding delete aborted'));
+      tx.objectStore(MEMORY_EMBEDDINGS_STORE).delete(id);
+    });
+  }
+
+  async function clearMemoryEmbeddings() {
+    const db = await openDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(MEMORY_EMBEDDINGS_STORE, 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onabort = () => reject(tx.error || new Error('memory embeddings clear aborted'));
+      tx.objectStore(MEMORY_EMBEDDINGS_STORE).clear();
+    });
+  }
+
+  async function saveMemoryEmbedding(id, content, embedding) {
+    if (!id || typeof content !== 'string' || !Array.isArray(embedding))
+      throw new Error('Invalid memory embedding');
+    await putMemoryEmbeddings([{ id, content, embedding }]);
+    const stored = await getMemoryEmbedding(id);
+    if (!stored || stored.content !== content || !sameEmbedding(stored.embedding, embedding))
+      throw new Error('Memory embedding verification failed');
+
+    // 古い形式のベクトルが残っていれば、コピーの検証後にだけ除去する。
+    const latest = getMemories();
+    const idx = latest.findIndex(m => m.id === id);
+    if (idx >= 0 && latest[idx].content === content && Array.isArray(latest[idx].embedding)) {
+      const { embedding: _removed, ...metadata } = latest[idx];
+      latest[idx] = metadata;
+      if (!setMemories(latest)) throw new Error('Memory vector localStorage cleanup failed');
+    }
+    return true;
+  }
+
+  // 旧形式のベクトルを安全に移行。検証できない場合はlocalStorageを一切削らない。
+  // IndexedDBにすでに同じ文章のベクトルがある場合は、そちらを優先する。
+  let _memoryMigrationPromise = null;
+  function migrateMemoryEmbeddingsToIDB() {
+    if (_memoryMigrationPromise) return _memoryMigrationPromise;
+    _memoryMigrationPromise = (async () => {
+      const legacy = getMemories().filter(m =>
+        m && m.id && typeof m.content === 'string' && Array.isArray(m.embedding));
+      if (legacy.length === 0) return { migrated: 0 };
+      const existing = await getMemoryEmbeddings();
+      const missing = legacy.filter(m =>
+        !existing.has(m.id) || existing.get(m.id).content !== m.content
+        || !Array.isArray(existing.get(m.id).embedding));
+      await putMemoryEmbeddings(missing.map(m => ({
+        id: m.id, content: m.content, embedding: m.embedding,
+      })));
+      const verified = await getMemoryEmbeddings();
+      for (const m of legacy) {
+        const saved = verified.get(m.id);
+        if (!saved || saved.content !== m.content || !Array.isArray(saved.embedding)
+            || (missing.includes(m) && !sameEmbedding(saved.embedding, m.embedding))) {
+          throw new Error('Memory migration verification failed: ' + m.id);
+        }
+      }
+      // 移行中に文章またはベクトルが編集された場合、その記録は元のまま残す。
+      const latest = getMemories();
+      let migrated = 0;
+      const clean = latest.map(m => {
+        const old = legacy.find(x => x.id === m.id);
+        if (!old || m.content !== old.content || !sameEmbedding(m.embedding, old.embedding))
+          return m;
+        migrated++;
+        const { embedding: _removed, ...metadata } = m;
+        return metadata;
+      });
+      if (migrated && !setMemories(clean))
+        throw new Error('Could not finish memory migration in localStorage');
+      return { migrated };
+    })();
+    _memoryMigrationPromise = _memoryMigrationPromise.finally(() => {
+      _memoryMigrationPromise = null;
+    });
+    return _memoryMigrationPromise;
+  }
+
+  // プレビュー専用：旧形式のダミー記憶を1件だけ使った移行の実機テスト。
+  // 既存の記憶本文・ペルソナ・会話には触れず、最後にダミーを削除する。
+  // 本番反映前にこのテストコードとUIは除去する。
+  async function runLegacyMemoryMigrationSelfTest() {
+    const id = 'mem_preview_migration_test_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const content = '動作確認専用の一時記憶。移行テスト後に削除します。';
+    const embedding = Array.from({ length: 768 }, (_, i) => Math.sin(i + 1) / 10);
+    const legacy = {
+      id, content, category: 'knowledge', tags: ['preview-migration-test'],
+      addedBy: 'user', createdAt: Date.now(), embedding,
+    };
+    let installed = false;
+    let passed = false;
+    let freedBytes = 0;
+    try {
+      if (!addMemory(legacy)) throw new Error('テスト用データを書き込めませんでした');
+      installed = true;
+      const before = getMemories();
+      const beforeRecord = before.find(m => m.id === id);
+      if (!beforeRecord || !sameEmbedding(beforeRecord.embedding, embedding))
+        throw new Error('旧形式の準備・読み戻しに失敗');
+      const beforeBytes = new Blob([JSON.stringify(before)]).size;
+
+      await migrateMemoryEmbeddingsToIDB();
+
+      const after = getMemories();
+      const record = after.find(m => m.id === id);
+      if (!record || record.content !== content || record.category !== legacy.category
+          || record.tags.join(',') !== legacy.tags.join(',')
+          || Object.prototype.hasOwnProperty.call(record, 'embedding'))
+        throw new Error('移行後の記憶本文・メタデータが一致しません');
+      const vectors = await getMemoryEmbeddings();
+      const stored = vectors.get(id);
+      if (!stored || stored.content !== content || !sameEmbedding(stored.embedding, embedding))
+        throw new Error('IndexedDBにベクトルが完全に保存されていません');
+
+      const backup = await getMemoriesForBackup();
+      const inBackup = backup.find(m => m.id === id);
+      if (!inBackup || !sameEmbedding(inBackup.embedding, embedding))
+        throw new Error('全体バックアップ用データにベクトルが復元されません');
+
+      freedBytes = beforeBytes - new Blob([JSON.stringify(after)]).size;
+      if (freedBytes <= 0) throw new Error('localStorageの容量削減を確認できません');
+      passed = true;
+    } finally {
+      if (installed) {
+        // 一時データのみを削除。既存の記憶を残す。
+        if (!setMemories(getMemories().filter(m => m.id !== id)))
+          throw new Error('テスト用記憶の後片付けに失敗しました');
+        await deleteMemoryEmbedding(id);
+      }
+    }
+    return { success: passed, freedBytes, dimensions: embedding.length };
+  }
+
+  // バックアップの形式は従来と同じ。別保存のベクトルを合成して書き出す。
+  async function getMemoriesForBackup() {
+    const memories = getMemories();
+    const vectors = await getMemoryEmbeddings(); // 取得失敗なら不完全なバックアップを作らずエラーにする
+    return memories.map(m => {
+      if (Array.isArray(m.embedding)) return m; // 未移行の記憶
+      const record = vectors.get(m.id);
+      if (record && record.content === m.content && Array.isArray(record.embedding))
+        return { ...m, embedding: record.embedding };
+      return m;
+    });
   }
 
   // ── Personas ──
@@ -504,7 +713,17 @@ const MindLinkStorage = (() => {
     return id;
   }
   function setActivePersonaId(id) {
+    // ペルソナが未登録の場合に undefined を localStorage へ書き込まない。
+    if (typeof id !== 'string' || !id.trim()) return false;
     return set('active_persona_id', id);
+  }
+  function repairLegacyActivePersonaId() {
+    // 旧コードで未選択ペルソナが文字列 "undefined" として保存された場合だけ修復。
+    // メモリやペルソナのデータ自体には触れない。
+    if (localStorage.getItem(key('active_persona_id')) === 'undefined') {
+      return set('active_persona_id', 'default');
+    }
+    return false;
   }
   // ── Global Context ──
   function getGlobalContext() {
@@ -675,7 +894,7 @@ const MindLinkStorage = (() => {
       activePersonaId: get('active_persona_id', null),
       globalContext: getGlobalContext(),
       personas: getPersonas(),
-      memories: getMemories(),
+      memories: await getMemoriesForBackup(),
       threads,
       reflections: await getReflections(),
       calendarEvents: getCalendarEvents(),
@@ -721,7 +940,12 @@ const MindLinkStorage = (() => {
       let n = 0;
       for (const m of (data.memories || [])) {
         if (!m || !m.id || existing.has(m.id)) continue;
-        addMemory(m); existing.add(m.id); n++;
+        // 旧バックアップに含まれるEmbeddingも移行先に保持する。
+        // まずベクトルを書き込み、その後で軽いメタデータだけlocalStorageへ。
+        const { embedding, ...metadata } = m;
+        if (Array.isArray(embedding)) await saveMemoryEmbedding(m.id, m.content, embedding);
+        if (!addMemory(metadata)) throw new Error('個別記憶の復元・保存に失敗しました');
+        existing.add(m.id); n++;
       }
       report.memories = n;
     }
@@ -1140,9 +1364,11 @@ const MindLinkStorage = (() => {
     getArchivedMessages, getUnmigratedArchivedThreadIds,
     getMessages, setMessages, addMessage,
     getMemories, setMemories, addMemory, deleteMemory, updateMemory,
+    getMemoryEmbeddings, saveMemoryEmbedding, migrateMemoryEmbeddingsToIDB,
+    clearMemoryEmbeddings, getMemoriesForBackup, runLegacyMemoryMigrationSelfTest,
     addLikedMessage, getLikedMessages, clearLikedMessages,
     getPersonas, setPersonas, savePersona, deletePersona, getPersona, getDefaultPersona,
-    getActivePersonaId, setActivePersonaId,
+    getActivePersonaId, setActivePersonaId, repairLegacyActivePersonaId,
     getGlobalContext, setGlobalContext,
     getDiaryEntries, saveDiaryEntry, deleteDiaryEntry, addDiaryComment, updateDiaryComment, deleteDiaryComment,
     getReflections, saveReflection, deleteReflection, updateReflection,

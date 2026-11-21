@@ -879,7 +879,7 @@ ${chunkText}`;
       if (btn) btn.textContent = `🔄 記憶 ${i + 1}/${freshMemories.length}件目...`;
       try {
         const embedding = await window.MindLinkAPI.getEmbedding(m.content);
-        MindLinkStorage.updateMemory(m.id, { embedding });
+        await MindLinkStorage.saveMemoryEmbedding(m.id, m.content, embedding);
         successCount++;
       } catch (e) {
         console.error('[Migrate] 記憶失敗:', m.id, e);
@@ -895,6 +895,33 @@ ${chunkText}`;
     }
     const failMsg = failCount > 0 ? ` / ${failCount}件失敗` : '';
     MindLinkApp.showToast(`移行完了 ✅ ${successCount}件成功${failMsg}`);
+  }
+
+  // プレビュー専用：ダミー記憶による旧形式 → IndexedDB の安全確認
+  async function handleLegacyMigrationSelfTest() {
+    const btn = document.getElementById('btn-test-legacy-memory-migration');
+    if (!btn) return;
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = '保存移行を検証中...';
+    try {
+      const result = await MindLinkStorage.runLegacyMemoryMigrationSelfTest();
+      alert(
+        '旧形式の保存移行テスト：成功\n\n' +
+        '・元の記憶本文と分類を保持\n' +
+        '・768次元のベクトルをIndexedDBに保存\n' +
+        '・バックアップ用にベクトルを再結合\n' +
+        '・localStorageから約' + (result.freedBytes / 1024).toFixed(1) + 'KB削減\n' +
+        '・テスト用の一時記憶は削除済み\n\n' +
+        '本番データには触れていません。'
+      );
+    } catch (e) {
+      console.error('[MindLink] 旧形式の移行実機テスト失敗:', e);
+      alert('旧形式の保存移行テスト：失敗\n\n' + (e?.message || String(e)) + '\n\n診断のため、内容を教えてください。');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
   }
 
   // 初期化: ボタンリスナーの登録
@@ -914,6 +941,7 @@ ${chunkText}`;
     });
 
     document.getElementById('btn-migrate-embeddings')?.addEventListener('click', handleMigrateEmbeddings);
+    document.getElementById('btn-test-legacy-memory-migration')?.addEventListener('click', handleLegacyMigrationSelfTest);
 
     // 全体バックアップ
     document.getElementById('btn-export-full')?.addEventListener('click', handleFullExport);
