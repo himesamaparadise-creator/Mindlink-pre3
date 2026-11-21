@@ -593,6 +593,61 @@ const MindLinkStorage = (() => {
     return _memoryMigrationPromise;
   }
 
+  // プレビュー専用：旧形式のダミー記憶を1件だけ使った移行の実機テスト。
+  // 既存の記憶本文・ペルソナ・会話には触れず、最後にダミーを削除する。
+  // 本番反映前にこのテストコードとUIは除去する。
+  async function runLegacyMemoryMigrationSelfTest() {
+    const id = 'mem_preview_migration_test_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const content = '動作確認専用の一時記憶。移行テスト後に削除します。';
+    const embedding = Array.from({ length: 768 }, (_, i) => Math.sin(i + 1) / 10);
+    const legacy = {
+      id, content, category: 'knowledge', tags: ['preview-migration-test'],
+      addedBy: 'user', createdAt: Date.now(), embedding,
+    };
+    let installed = false;
+    let passed = false;
+    let freedBytes = 0;
+    try {
+      if (!addMemory(legacy)) throw new Error('テスト用データを書き込めませんでした');
+      installed = true;
+      const before = getMemories();
+      const beforeRecord = before.find(m => m.id === id);
+      if (!beforeRecord || !sameEmbedding(beforeRecord.embedding, embedding))
+        throw new Error('旧形式の準備・読み戻しに失敗');
+      const beforeBytes = new Blob([JSON.stringify(before)]).size;
+
+      await migrateMemoryEmbeddingsToIDB();
+
+      const after = getMemories();
+      const record = after.find(m => m.id === id);
+      if (!record || record.content !== content || record.category !== legacy.category
+          || record.tags.join(',') !== legacy.tags.join(',')
+          || Object.prototype.hasOwnProperty.call(record, 'embedding'))
+        throw new Error('移行後の記憶本文・メタデータが一致しません');
+      const vectors = await getMemoryEmbeddings();
+      const stored = vectors.get(id);
+      if (!stored || stored.content !== content || !sameEmbedding(stored.embedding, embedding))
+        throw new Error('IndexedDBにベクトルが完全に保存されていません');
+
+      const backup = await getMemoriesForBackup();
+      const inBackup = backup.find(m => m.id === id);
+      if (!inBackup || !sameEmbedding(inBackup.embedding, embedding))
+        throw new Error('全体バックアップ用データにベクトルが復元されません');
+
+      freedBytes = beforeBytes - new Blob([JSON.stringify(after)]).size;
+      if (freedBytes <= 0) throw new Error('localStorageの容量削減を確認できません');
+      passed = true;
+    } finally {
+      if (installed) {
+        // 一時データのみを削除。既存の記憶を残す。
+        if (!setMemories(getMemories().filter(m => m.id !== id)))
+          throw new Error('テスト用記憶の後片付けに失敗しました');
+        await deleteMemoryEmbedding(id);
+      }
+    }
+    return { success: passed, freedBytes, dimensions: embedding.length };
+  }
+
   // バックアップの形式は従来と同じ。別保存のベクトルを合成して書き出す。
   async function getMemoriesForBackup() {
     const memories = getMemories();
@@ -1310,7 +1365,7 @@ const MindLinkStorage = (() => {
     getMessages, setMessages, addMessage,
     getMemories, setMemories, addMemory, deleteMemory, updateMemory,
     getMemoryEmbeddings, saveMemoryEmbedding, migrateMemoryEmbeddingsToIDB,
-    clearMemoryEmbeddings, getMemoriesForBackup,
+    clearMemoryEmbeddings, getMemoriesForBackup, runLegacyMemoryMigrationSelfTest,
     addLikedMessage, getLikedMessages, clearLikedMessages,
     getPersonas, setPersonas, savePersona, deletePersona, getPersona, getDefaultPersona,
     getActivePersonaId, setActivePersonaId, repairLegacyActivePersonaId,
