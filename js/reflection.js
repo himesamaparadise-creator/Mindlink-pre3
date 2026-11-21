@@ -907,17 +907,17 @@ ${chunkText}`;
     try {
       const result = await MindLinkStorage.runLegacyMemoryMigrationSelfTest();
       alert(
-        '旧形式の保存移行テスト：成功\\n\\n' +
-        '・元の記憶本文と分類を保持\\n' +
-        '・768次元のベクトルをIndexedDBに保存\\n' +
-        '・バックアップ用にベクトルを再結合\\n' +
-        '・localStorageから約' + (result.freedBytes / 1024).toFixed(1) + 'KB削減\\n' +
-        '・テスト用の一時記憶は削除済み\\n\\n' +
+        '旧形式の保存移行テスト：成功\n\n' +
+        '・元の記憶本文と分類を保持\n' +
+        '・768次元のベクトルをIndexedDBに保存\n' +
+        '・バックアップ用にベクトルを再結合\n' +
+        '・localStorageから約' + (result.freedBytes / 1024).toFixed(1) + 'KB削減\n' +
+        '・テスト用の一時記憶は削除済み\n\n' +
         '本番データには触れていません。'
       );
     } catch (e) {
       console.error('[MindLink] 旧形式の移行実機テスト失敗:', e);
-      alert('旧形式の保存移行テスト：失敗\\n\\n' + (e?.message || String(e)) + '\\n\\n診断のため、内容を教えてください。');
+      alert('旧形式の保存移行テスト：失敗\n\n' + (e?.message || String(e)) + '\n\n診断のため、内容を教えてください。');
     } finally {
       btn.disabled = false;
       btn.textContent = originalText;
