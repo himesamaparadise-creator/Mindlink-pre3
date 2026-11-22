@@ -879,7 +879,7 @@ ${chunkText}`;
       if (btn) btn.textContent = `🔄 記憶 ${i + 1}/${freshMemories.length}件目...`;
       try {
         const embedding = await window.MindLinkAPI.getEmbedding(m.content);
-        MindLinkStorage.updateMemory(m.id, { embedding });
+        await MindLinkStorage.saveMemoryEmbedding(m.id, m.content, embedding);
         successCount++;
       } catch (e) {
         console.error('[Migrate] 記憶失敗:', m.id, e);

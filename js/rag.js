@@ -74,27 +74,35 @@ const MindLinkRAG = (() => {
 
       const queryEmbedding = precomputedEmbedding || await window.MindLinkAPI.getEmbedding(query);
       const memories = MindLinkStorage.getMemories();
-      
+
       if (memories.length === 0) return [];
+      // ベクトルの読み込みが失敗した場合は従来のlocalStorage内のものだけで検索する。
+      let stored = new Map();
+      try { stored = await MindLinkStorage.getMemoryEmbeddings(); }
+      catch (readErr) { console.warn('[MindLink RAG] Memory vector read failed:', readErr); }
 
       let scored = [];
       for (const m of memories) {
-        let embedding = m.embedding;
-        // 次元数が変わった古いベクトルは作り直す（容量削減の移行を兼ねる）
-        if (Array.isArray(embedding) && embedding.length !== queryEmbedding.length) {
+        const saved = stored.get(m.id);
+        let embedding = Array.isArray(m.embedding) ? m.embedding :
+          (saved && saved.content === m.content ? saved.embedding : null);
+        // 次元数や本文が異なる旧ベクトルは再作成する。
+        if (!Array.isArray(embedding) || embedding.length !== queryEmbedding.length)
           embedding = null;
-        }
-        // 埋め込みデータがない場合は、初回検索時にオンザフライで生成して保存
-        if (!embedding || !Array.isArray(embedding)) {
+        if (!embedding) {
           try {
             embedding = await window.MindLinkAPI.getEmbedding(m.content);
-            MindLinkStorage.updateMemory(m.id, { embedding });
+            // 保存に失敗しても、今回生成したベクトルによる会話検索は続ける。
+            if (MindLinkStorage.getMemories().some(cur => cur.id === m.id && cur.content === m.content)) {
+              try { await MindLinkStorage.saveMemoryEmbedding(m.id, m.content, embedding); }
+              catch (writeErr) { console.warn('[MindLink RAG] Memory vector save failed:', writeErr); }
+            }
           } catch (embedErr) {
             console.warn('[MindLink RAG] Memory embedding generation failed:', embedErr);
             continue;
           }
         }
-        
+
         scored.push({
           ...m,
           score: cosineSimilarity(queryEmbedding, embedding)
